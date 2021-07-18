@@ -39,7 +39,17 @@ public:
     // mainsail_out is in the range 0 to 100, defaults to 100 (fully relaxed) if no input configured
     // wingsail_out is in the range -100 to 100, defaults to 0
     // mast_rotation_out is in the range -100 to 100, defaults to 0
-    void get_pilot_desired_mainsail(float &mainsail_out, float &wingsail_out, float &mast_rotation_out);
+    // differential_out is in the range -100 to 100, defaults to 0
+    // fore_flap_lim_out is in the range 0 to 100, defaults to 0
+    // mizz_flap_lim_out is in the range 0 to 100, defaults to 0
+    void get_pilot_desired_mainsail(
+        float &mainsail_out,
+        float &wingsail_out,
+        float &mast_rotation_out,
+        float &differential_out,
+        float &fore_flap_lim_out,
+        float &mizz_flap_lim_out
+    );
 
     // calculate throttle and mainsail angle required to attain desired speed (in m/s)
     void get_throttle_and_mainsail_out(float desired_speed, float &throttle_out, float &mainsail_out, float &wingsail_out, float &mast_rotation_out);
@@ -67,6 +77,9 @@ public:
 
     // calculate the heading to sail on if we cant go upwind
     float calc_heading(float desired_heading_cd);
+
+    // calculate the compass heading in radians for a given point of sail
+    float calc_point_of_sail_heading_rad(float cos_in, float sin_in);
 
     // states of USE_MOTOR parameter and motor_state variable
     enum class UseMotor {
@@ -103,8 +116,15 @@ private:
     AP_Float sail_windspeed_min;
     AP_Float xtrack_max;
     AP_Float loit_radius;
+    AP_Float wind_angle_rad;
 
     RC_Channel *channel_mainsail;   // rc input channel for controlling mainsail
+    RC_Channel *channel_differential;   // rc input channel for controlling sail differential
+    RC_Channel *channel_fore_flap;   // rc input channel for controlling foresail flap limits
+    RC_Channel *channel_mizz_flap;   // rc input channel for controlling foresail flap limits
+    // channels for controlling the point of sail in acro mode
+    RC_Channel *channel_sin;
+    RC_Channel *channel_cos;
     bool currently_tacking;         // true when sailboat is in the process of tacking to a new heading
     float tack_heading_rad;         // target heading in radians while tacking in either acro or autonomous modes
     uint32_t tack_request_ms;       // system time user requested tack

@@ -112,6 +112,7 @@ const AP_Param::GroupInfo Sailboat::var_info[] = {
 Sailboat::Sailboat()
 {
     AP_Param::setup_object_defaults(this, var_info);
+    wind_angle_rad = 0.0f;
 }
 
 // true if sailboat navigation (aka tacking) is enabled
@@ -152,7 +153,7 @@ void Sailboat::init()
     set_motor_state(UseMotor::USE_MOTOR_ASSIST, false);
 }
 
-// initialise rc input (channel_mainsail), may be called intermittently
+// initialise rc inputs (channel_*), may be called intermittently
 void Sailboat::init_rc_in()
 {
     // get auxiliary throttle value
@@ -166,28 +167,80 @@ void Sailboat::init_rc_in()
         // use throttle channel
         channel_mainsail = rover.channel_throttle;
     }
+    // get differential value
+    rc_ptr = rc().find_channel_for_option(RC_Channel::AUX_FUNC::SAIL_DIFF);
+    if (rc_ptr != nullptr) {
+        // use aux as sail differential input if defined
+        channel_differential = rc_ptr;
+        channel_differential->set_angle(0);
+        channel_differential->set_default_dead_zone(30);
+    } else {
+        // use lateral channel
+        channel_differential = rover.channel_lateral;
+    }
+    // get foresail flap limit
+    rc_ptr = rc().find_channel_for_option(RC_Channel::AUX_FUNC::FLAP_LIM_FWD);
+    if (rc_ptr != nullptr) {
+        channel_fore_flap = rc_ptr;
+        channel_fore_flap->set_angle(0);
+        channel_fore_flap->set_default_dead_zone(30);
+    } else {
+        channel_fore_flap = nullptr;
+    }
+    // get mizzen flap limit
+    rc_ptr = rc().find_channel_for_option(RC_Channel::AUX_FUNC::FLAP_LIM_MIZZ);
+    if (rc_ptr != nullptr) {
+        channel_mizz_flap = rc_ptr;
+        channel_mizz_flap->set_angle(0);
+        channel_mizz_flap->set_default_dead_zone(30);
+    } else {
+        channel_mizz_flap = nullptr;
+    }
+    // get point of sail sin and cos
+    channel_sin = rover.channel_pitch;
+    channel_cos = rover.channel_roll;
 }
 
 // decode pilot mainsail input and return in steer_out and throttle_out arguments
 // mainsail_out is in the range 0 to 100, defaults to 100 (fully relaxed) if no input configured
-void Sailboat::get_pilot_desired_mainsail(float &mainsail_out, float &wingsail_out, float &mast_rotation_out)
+void Sailboat::get_pilot_desired_mainsail(
+    float &mainsail_out,
+    float &wingsail_out,
+    float &mast_rotation_out,
+    float &differential_out,
+    float &fore_flap_lim_out,
+    float &mizz_flap_lim_out
+)
 {
     // no RC input means mainsail is moved to trim
     if ((rover.failsafe.bits & FAILSAFE_EVENT_THROTTLE) || (channel_mainsail == nullptr)) {
         mainsail_out = 100.0f;
         wingsail_out = 0.0f;
         mast_rotation_out = 0.0f;
+        differential_out = 0.0f;
+        fore_flap_lim_out = 0.0f;
+        mizz_flap_lim_out = 0.0f;
         return;
     }
     mainsail_out = constrain_float(channel_mainsail->get_control_in(), 0.0f, 100.0f);
     wingsail_out = constrain_float(channel_mainsail->get_control_in(), -100.0f, 100.0f);
     mast_rotation_out = constrain_float(channel_mainsail->get_control_in(), -100.0f, 100.0f);
+    if (channel_differential != nullptr) {
+        differential_out = constrain_float(channel_differential->get_control_in(), -100.0f, 100.0f);
+    } else differential_out = 0.0f;
+    if (channel_fore_flap != nullptr) {
+        fore_flap_lim_out = constrain_float(channel_fore_flap->get_control_in(), 0.0f, 100.0f);
+    } else fore_flap_lim_out = 0.0f;
+    if (channel_mizz_flap != nullptr) {
+        mizz_flap_lim_out = constrain_float(channel_mizz_flap->get_control_in(), 0.0f, 100.0f);
+    } else mizz_flap_lim_out = 0.0f;
 }
 
 // calculate throttle and mainsail angle required to attain desired speed (in m/s)
 // returns true if successful, false if sailboats not enabled
 void Sailboat::get_throttle_and_mainsail_out(float desired_speed, float &throttle_out, float &mainsail_out, float &wingsail_out, float &mast_rotation_out)
 {
+    hal.console->printf("Kilroy wuz here!\n");
     if (!sail_enabled()) {
         throttle_out = 0.0f;
         mainsail_out = 0.0f;
@@ -512,6 +565,23 @@ float Sailboat::calc_heading(float desired_heading_cd)
     } else {
         return degrees(right_no_go_heading_rad) * 100.0f;
     }
+}
+
+// Calculated heading, in radians, based on a point of sail
+float Sailboat::calc_point_of_sail_heading_rad(float cos_in, float sin_in)
+{
+    // get the true wind from the windvane
+    const float true_wind_rad = rover.g2.windvane.get_true_wind_direction_rad();
+    // normalize the sin & cos so that we can feed them in to atan2
+    const float norm_factor = 1/((cos_in * cos_in) + (sin_in * sin_in));
+    cos_in *= norm_factor;
+    sin_in *= norm_factor;
+    // if norm_factor is too large, then the stick is centered and we should use the last wind_angle
+    if (norm_factor < 10.0f)
+    {
+        wind_angle_rad = atan2f(sin_in, cos_in);
+    }
+    return wrap_2PI(true_wind_rad - wind_angle_rad);
 }
 
 // set state of motor
