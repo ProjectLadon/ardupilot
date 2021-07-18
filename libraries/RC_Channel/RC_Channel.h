@@ -189,7 +189,7 @@ public:
         SOARING =             88, // three-position switch to set soaring mode
         LANDING_FLARE =       89, // force flare, throttle forced idle, pitch to LAND_PITCH_CD, tilts up
         EKF_POS_SOURCE =      90, // change EKF position source between primary, secondary and tertiary sources
-        ARSPD_CALIBRATE=      91, // calibrate airspeed ratio 
+        ARSPD_CALIBRATE=      91, // calibrate airspeed ratio
         FBWA =                92, // Fly-By-Wire-A
         RELOCATE_MISSION =    93, // used in separate branch MISSION_RELATIVE
         VTX_POWER =           94, // VTX power level
@@ -208,6 +208,11 @@ public:
         DISABLE_AIRSPEED_USE = 106, // equivalent to AIRSPEED_USE 0
         // if you add something here, make sure to update the documentation of the parameter in RC_Channel.cpp!
         // also, if you add an option >255, you will need to fix duplicate_options_exist
+
+        // Ladon Robotics RC Channels
+        SAIL_DIFF =          127,
+        FLAP_LIM_FWD =       128,
+        FLAP_LIM_MIZZ =      129,
 
         // inputs from 200 will eventually used to replace RCMAP
         ROLL =               201, // roll input
@@ -464,7 +469,7 @@ public:
     bool log_raw_data() const {
         return _options & uint32_t(Option::LOG_DATA);
     }
-    
+
     bool arming_check_throttle() const {
         return _options & uint32_t(Option::ARMING_CHECK_THROTTLE);
     }

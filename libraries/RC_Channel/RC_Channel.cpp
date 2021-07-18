@@ -442,7 +442,7 @@ void RC_Channel::read_mode_switch()
     }
 }
 
-bool RC_Channel::debounce_completed(int8_t position) 
+bool RC_Channel::debounce_completed(int8_t position)
 {
     // switch change not detected
     if (switch_state.current_position == position) {
@@ -520,6 +520,9 @@ void RC_Channel::init_aux_function(const aux_func_t ch_option, const AuxSwitchPo
     case AUX_FUNC::RUNCAM_OSD_CONTROL:
     case AUX_FUNC::SPRAYER:
     case AUX_FUNC::DISABLE_AIRSPEED_USE:
+    case AUX_FUNC::SAIL_DIFF:
+    case AUX_FUNC::FLAP_LIM_FWD:
+    case AUX_FUNC::FLAP_LIM_MIZZ:
 #if HAL_MOUNT_ENABLED
     case AUX_FUNC::RETRACT_MOUNT:
 #endif
@@ -577,10 +580,14 @@ const RC_Channel::LookupTable RC_Channel::lookuptable[] = {
     { AUX_FUNC::CAM_MODE_TOGGLE,"CamModeToggle"},
     { AUX_FUNC::GENERATOR,"Generator"},
     { AUX_FUNC::ARSPD_CALIBRATE,"Calibrate Airspeed"},
+    { AUX_FUNC::SAIL_DIFF,"Dual Wingsail Differential Input"},
+    { AUX_FUNC::FLAP_LIM_FWD,"Dual Wingsail Foresail Flap Limit"},
+    { AUX_FUNC::FLAP_LIM_MIZZ,"Dual Wingsail Mizzen Flap Limit"},
+    { AUX_FUNC::MAINSAIL,"Mainsail Sheet Command"},
 };
 
 /* lookup the announcement for switch change */
-const char *RC_Channel::string_for_aux_function(AUX_FUNC function) const     
+const char *RC_Channel::string_for_aux_function(AUX_FUNC function) const
 {
      for (const struct LookupTable entry : lookuptable) {
         if (entry.option == function) {
@@ -627,13 +634,13 @@ bool RC_Channel::read_aux()
         const char *temp =  nullptr;
         switch (new_position) {
         case AuxSwitchPos::HIGH:
-            temp = "HIGH";           
+            temp = "HIGH";
             break;
         case AuxSwitchPos::MIDDLE:
             temp = "MIDDLE";
             break;
         case AuxSwitchPos::LOW:
-            temp = "LOW";          
+            temp = "LOW";
             break;
         }
         gcs().send_text(MAV_SEVERITY_INFO, "%s %s", aux_string, temp);
@@ -1211,10 +1218,10 @@ bool RC_Channel::read_3pos_switch(RC_Channel::AuxSwitchPos &ret) const
     if (in <= RC_MIN_LIMIT_PWM || in >= RC_MAX_LIMIT_PWM) {
         return false;
     }
-    
+
     // switch is reversed if 'reversed' option set on channel and switches reverse is allowed by RC_OPTIONS
     bool switch_reversed = reversed && rc().switch_reverse_allowed();
-    
+
     if (in < AUX_SWITCH_PWM_TRIGGER_LOW) {
         ret = switch_reversed ? AuxSwitchPos::HIGH : AuxSwitchPos::LOW;
     } else if (in > AUX_SWITCH_PWM_TRIGGER_HIGH) {

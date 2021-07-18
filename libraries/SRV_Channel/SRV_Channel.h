@@ -174,6 +174,9 @@ public:
         k_trim                  = 135,  // always outputs SERVOn_TRIM
         k_max                   = 136,  // always outputs SERVOn_MAX
         k_mast_rotation         = 137,
+        k_sail_diff             = 201,
+        k_flap_lim_fwd          = 202,
+        k_flap_lim_mizz         = 203,
         k_nr_aux_servo_functions         ///< This must be the last enum value (only add new values _before_ this one)
     } Aux_servo_function_t;
 
@@ -244,7 +247,7 @@ public:
     void reversed_set_and_save_ifchanged(bool r) {
         reversed.set_and_save_ifchanged(r?1:0);
     }
-    
+
     // return true if the SERVOn_FUNCTION has been configured in
     // either storage or a defaults file. This is used for upgrade of
     // parameters in plane
@@ -304,7 +307,7 @@ private:
     typedef uint16_t servo_mask_t;
 
     // mask of channels where we have a output_pwm value. Cleared when a
-    // scaled value is written. 
+    // scaled value is written.
     static servo_mask_t have_pwm_mask;
 
     // previous radio_in during pass-thru
@@ -363,7 +366,7 @@ public:
 
     // get output channel mask for a function
     static uint16_t get_output_channel_mask(SRV_Channel::Aux_servo_function_t function);
-    
+
     // limit slew rate to given limit in percent per second
     static void limit_slew_rate(SRV_Channel::Aux_servo_function_t function, float slew_rate, float dt);
 
@@ -381,7 +384,7 @@ public:
 
     // set MIN/MAX parameters for a function
     static void set_output_min_max(SRV_Channel::Aux_servo_function_t function, uint16_t min_pwm, uint16_t max_pwm);
-    
+
     // save trims
     void save_trim(void);
 
@@ -414,7 +417,7 @@ public:
 
     // copy radio_in to servo_out by channel mask
     static void copy_radio_in_out_mask(uint16_t mask);
-    
+
     // setup failsafe for an auxiliary channel function, by pwm
     static void set_failsafe_pwm(SRV_Channel::Aux_servo_function_t function, uint16_t pwm);
 
@@ -496,7 +499,7 @@ public:
         }
         return SRV_Channel::Aux_servo_function_t((SRV_Channel::k_motor9+(channel-8)));
     }
-    
+
     static void cork();
 
     static void push();
@@ -556,7 +559,7 @@ private:
     // support for Robotis servo protocol
     AP_RobotisServo robotis;
     static AP_RobotisServo *robotis_ptr;
-    
+
 #if HAL_SUPPORT_RCOUT_SERIAL
     // support for BLHeli protocol
     AP_BLHeli blheli;
@@ -569,7 +572,7 @@ private:
     // mask of outputs which use a digital output protocol, not
     // PWM (eg. DShot)
     static uint16_t digital_mask;
-    
+
     // mask of outputs which are digitally reversible (eg. DShot-3D)
     static uint16_t reversible_mask;
 
