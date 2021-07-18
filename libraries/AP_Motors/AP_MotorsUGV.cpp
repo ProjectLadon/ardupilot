@@ -189,6 +189,11 @@ void AP_MotorsUGV::setup_servo_output()
 
     // mainsail range from 0 to 100
     SRV_Channels::set_range(SRV_Channel::k_mainsail_sheet, 100);
+    // flap limit range from 0 to 100
+    SRV_Channels::set_range(SRV_Channel::k_flap_lim_fwd, 100);
+    SRV_Channels::set_range(SRV_Channel::k_flap_lim_mizz, 100);
+    // differential sail range from -100 to 100
+    SRV_Channels::set_angle(SRV_Channel::k_sail_diff, 100);
     // wing sail -100 to 100
     SRV_Channels::set_angle(SRV_Channel::k_wingsail_elevator, 100);
     // mast rotation -100 to 100
@@ -245,6 +250,24 @@ void AP_MotorsUGV::set_walking_height(float walking_height)
 void AP_MotorsUGV::set_mainsail(float mainsail)
 {
     _mainsail = constrain_float(mainsail, 0.0f, 100.0f);
+}
+
+// set sail differential input as a value from -100 to 100
+void AP_MotorsUGV::set_sail_differential(float sail_differential)
+{
+    _sail_differential = constrain_float(sail_differential, -100.0f, 100.0f);
+}
+
+// set mainsail input as a value from 0 to 100
+void AP_MotorsUGV::set_foresail_flap_limit(float foresail_flap_limit)
+{
+    _foresail_flap_limit = constrain_float(foresail_flap_limit, 0.0f, 100.0f);
+}
+
+// set mainsail input as a value from 0 to 100
+void AP_MotorsUGV::set_mizzen_flap_limit(float mizzen_flap_limit)
+{
+    _mizzen_flap_limit = constrain_float(mizzen_flap_limit, 0.0f, 100.0f);
 }
 
 // set wingsail input as a value from -100 to 100
@@ -380,6 +403,15 @@ bool AP_MotorsUGV::output_test_pct(motor_test_order motor_seq, float pct)
             if (SRV_Channels::function_assigned(SRV_Channel::k_mast_rotation)) {
                 SRV_Channels::set_output_scaled(SRV_Channel::k_mast_rotation, pct);
             }
+            if (SRV_Channels::function_assigned(SRV_Channel::k_sail_diff)) {
+                SRV_Channels::set_output_scaled(SRV_Channel::k_sail_diff, pct);
+            }
+            if (SRV_Channels::function_assigned(SRV_Channel::k_flap_lim_fwd)) {
+                SRV_Channels::set_output_scaled(SRV_Channel::k_flap_lim_fwd, pct);
+            }
+            if (SRV_Channels::function_assigned(SRV_Channel::k_flap_lim_mizz)) {
+                SRV_Channels::set_output_scaled(SRV_Channel::k_flap_lim_mizz, pct);
+            }
             break;
         }
         case MOTOR_TEST_LAST:
@@ -445,6 +477,15 @@ bool AP_MotorsUGV::output_test_pwm(motor_test_order motor_seq, float pwm)
             }
             if (SRV_Channels::function_assigned(SRV_Channel::k_mast_rotation)) {
                 SRV_Channels::set_output_pwm(SRV_Channel::k_mast_rotation, pwm);
+            }
+            if (SRV_Channels::function_assigned(SRV_Channel::k_sail_diff)) {
+                SRV_Channels::set_output_scaled(SRV_Channel::k_sail_diff, pwm);
+            }
+            if (SRV_Channels::function_assigned(SRV_Channel::k_flap_lim_fwd)) {
+                SRV_Channels::set_output_scaled(SRV_Channel::k_flap_lim_fwd, pwm);
+            }
+            if (SRV_Channels::function_assigned(SRV_Channel::k_flap_lim_mizz)) {
+                SRV_Channels::set_output_scaled(SRV_Channel::k_flap_lim_mizz, pwm);
             }
             break;
         }
@@ -909,6 +950,15 @@ void AP_MotorsUGV::output_sail()
     SRV_Channels::set_output_scaled(SRV_Channel::k_mainsail_sheet, _mainsail);
     SRV_Channels::set_output_scaled(SRV_Channel::k_wingsail_elevator, _wingsail);
     SRV_Channels::set_output_scaled(SRV_Channel::k_mast_rotation, _mast_rotation);
+    if (SRV_Channels::function_assigned(SRV_Channel::k_sail_diff))
+        SRV_Channels::set_output_scaled(
+            SRV_Channel::k_sail_diff, _sail_differential);
+    if (SRV_Channels::function_assigned(SRV_Channel::k_flap_lim_fwd))
+        SRV_Channels::set_output_scaled(
+            SRV_Channel::k_flap_lim_fwd, _foresail_flap_limit);
+    if (SRV_Channels::function_assigned(SRV_Channel::k_flap_lim_mizz))
+        SRV_Channels::set_output_scaled(
+            SRV_Channel::k_flap_lim_mizz, _mizzen_flap_limit);
 }
 
 // slew limit throttle for one iteration
@@ -1012,4 +1062,3 @@ namespace AP {
         return AP_MotorsUGV::get_singleton();
     }
 }
-

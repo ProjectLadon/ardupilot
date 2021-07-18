@@ -83,6 +83,18 @@ public:
     void set_mainsail(float mainsail);
     float get_mainsail() const { return _mainsail; }
 
+    // set or get sail differential input as a value from -100 to 100
+    void set_sail_differential(float sail_differential);
+    float get_sail_differential() const { return _sail_differential; }
+
+    // set or get foresail flap input as a value from 0 to 100
+    void set_foresail_flap_limit(float foresail_flap_limit);
+    float get_foresail_flap_limit() const { return _foresail_flap_limit; }
+
+    // set or get mizzen flap input as a value from 0 to 100
+    void set_mizzen_flap_limit(float mizzen_flap_limit);
+    float get_mizzen_flap_limit() const { return _mizzen_flap_limit; }
+
     // set or get wingsail input as a value from -100 to 100
     void set_wingsail(float wingsail);
     float get_wingsail() const { return _wingsail; }
@@ -210,8 +222,11 @@ protected:
     float   _lateral;  // requested lateral input as a value from -100 to +100
     float   _roll;      // requested roll as a value from -1 to +1
     float   _pitch;     // requested pitch as a value from -1 to +1
-    float   _walking_height; // requested height as a value from -1 to +1   
+    float   _walking_height; // requested height as a value from -1 to +1
     float   _mainsail;  // requested mainsail input as a value from 0 to 100
+    float   _sail_differential;  // requested wing sail differential input as a value in the range +- 100
+    float   _foresail_flap_limit;  // requested foresail flap limit input as a value in the range 0 to 100
+    float   _mizzen_flap_limit;  // requested mizzen flap input as a value in the range 0 to 100
     float   _wingsail;  // requested wing sail input as a value in the range +- 100
     float   _mast_rotation;  // requested mast rotation input as a value in the range +- 100
     uint16_t _motor_mask;   // mask of motors configured with pwm_type
