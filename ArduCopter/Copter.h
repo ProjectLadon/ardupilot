@@ -50,7 +50,7 @@
 #include <Filter/Filter.h>                  // Filter library
 #include <AP_Airspeed/AP_Airspeed.h>        // needed for AHRS build
 #include <AP_Vehicle/AP_Vehicle.h>          // needed for AHRS build
-#include <AP_InertialNav/AP_InertialNav.h>  // ArduPilot Mega inertial navigation library
+#include <AP_InertialNav/AP_InertialNav_NavEKF.h>  // ArduPilot Mega inertial navigation library
 #include <AC_WPNav/AC_WPNav.h>              // ArduCopter waypoint navigation library
 #include <AC_WPNav/AC_Loiter.h>             // ArduCopter Loiter Mode Library
 #include <AC_WPNav/AC_Circle.h>             // circle navigation library
@@ -120,7 +120,7 @@
 #if AC_FENCE == ENABLED
  # include <AC_Fence/AC_Fence.h>
 #endif
-#if AC_TERRAIN == ENABLED
+#if AP_TERRAIN_AVAILABLE
  # include <AP_Terrain/AP_Terrain.h>
 #endif
 #if OPTFLOW == ENABLED
@@ -516,7 +516,7 @@ private:
 #endif
 
     // terrain handling
-#if AP_TERRAIN_AVAILABLE && AC_TERRAIN && MODE_AUTO_ENABLED == ENABLED
+#if AP_TERRAIN_AVAILABLE && MODE_AUTO_ENABLED == ENABLED
     AP_Terrain terrain{mode_auto.mission};
 #endif
 
@@ -884,7 +884,6 @@ private:
     // terrain.cpp
     void terrain_update();
     void terrain_logging();
-    float get_terrain_margin() const;
 
     // tuning.cpp
     void tuning();

@@ -145,6 +145,7 @@ public:
     enum OptionsMask {
         ON_FAILURE_AHRS_WIND_MAX_DO_DISABLE                   = (1<<0),   // If set then use airspeed failure check
         ON_FAILURE_AHRS_WIND_MAX_RECOVERY_DO_REENABLE         = (1<<1),   // If set then automatically enable the airspeed sensor use when healthy again.
+        DISABLE_VOLTAGE_CORRECTION                            = (1<<2),
     };
 
     enum airspeed_type {
@@ -205,6 +206,7 @@ private:
         AP_Int8  autocal;
         AP_Int8  tube_order;
         AP_Int8  skip_cal;
+        AP_Int32 bus_id;
     } param[AIRSPEED_MAX_SENSORS];
 
     struct airspeed_state {

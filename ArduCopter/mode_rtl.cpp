@@ -22,6 +22,8 @@ bool ModeRTL::init(bool ignore_checks)
     _state = SubMode::STARTING;
     _state_complete = true; // see run() method below
     terrain_following_allowed = !copter.failsafe.terrain;
+    // reset flag indicating if pilot has applied roll or pitch inputs during landing
+    copter.ap.land_repo_active = false;
     return true;
 }
 
@@ -544,7 +546,7 @@ void ModeRTL::compute_return_target()
     rtl_path.return_target.alt = MAX(rtl_path.return_target.alt, curr_alt);
 }
 
-bool ModeRTL::get_wp(Location& destination)
+bool ModeRTL::get_wp(Location& destination) const
 {
     // provide target in states which use wp_nav
     switch (_state) {

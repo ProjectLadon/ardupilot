@@ -28,7 +28,7 @@
 #include <AP_Math/crc.h>
 #include <AP_Vehicle/AP_Vehicle.h>
 #if APM_BUILD_TYPE(APM_BUILD_Rover)
-#include <AP_Motors/AP_MotorsUGV.h>
+#include <AR_Motors/AP_MotorsUGV.h>
 #else
 #include <AP_Motors/AP_Motors_Class.h>
 #endif
@@ -743,8 +743,9 @@ bool AP_BLHeli::BL_ConnectEx(void)
 
     blheli.interface_mode[blheli.chan] = 0;
 
-    uint16_t *devword = (uint16_t *)blheli.deviceInfo[blheli.chan];
-    switch (*devword) {
+    uint16_t devword;
+    memcpy(&devword, blheli.deviceInfo[blheli.chan], sizeof(devword));
+    switch (devword) {
     case 0x9307:
     case 0x930A:
     case 0x930F:
@@ -769,7 +770,7 @@ bool AP_BLHeli::BL_ConnectEx(void)
             debug("Interface type imARM_BLB");
         } else {
             blheli.ack = ACK_D_GENERAL_ERROR;
-            debug("Unknown interface type 0x%04x", *devword);
+            debug("Unknown interface type 0x%04x", devword);
             break;
         }
     }
@@ -1494,7 +1495,7 @@ void AP_BLHeli::log_bidir_telemetry(void)
     // ask the next ESC for telemetry
     uint8_t idx_pos = last_telem_esc;
     uint8_t idx = (idx_pos + 1) % num_motors;
-    for (; idx != idx_pos; idx = (idx_pos + 1) % num_motors) {
+    for (; idx != idx_pos; idx = (idx + 1) % num_motors) {
         if (SRV_Channels::have_digital_outputs(1U << motor_map[idx])) {
             break;
         }
@@ -1563,7 +1564,7 @@ void AP_BLHeli::update_telemetry(void)
         // ask the next ESC for telemetry
         uint8_t idx_pos = last_telem_esc;
         uint8_t idx = (idx_pos + 1) % num_motors;
-        for (; idx != idx_pos; idx = (idx_pos + 1) % num_motors) {
+        for (; idx != idx_pos; idx = (idx + 1) % num_motors) {
             if (SRV_Channels::have_digital_outputs(1U << motor_map[idx])) {
                 break;
             }

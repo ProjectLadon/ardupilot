@@ -53,7 +53,7 @@
 #include <AP_Relay/AP_Relay.h>           // APM relay
 #include <AP_Mount/AP_Mount.h>           // Camera/Antenna mount
 #include <AP_Vehicle/AP_Vehicle.h>         // needed for AHRS build
-#include <AP_InertialNav/AP_InertialNav.h>     // ArduPilot Mega inertial navigation library
+#include <AP_InertialNav/AP_InertialNav_NavEKF.h>     // ArduPilot Mega inertial navigation library
 #include <AC_WPNav/AC_WPNav.h>           // Waypoint navigation library
 #include <AC_WPNav/AC_Loiter.h>
 #include <AC_WPNav/AC_Circle.h>          // circle navigation library
@@ -372,7 +372,7 @@ private:
 #endif
 
     // terrain handling
-#if AP_TERRAIN_AVAILABLE && AC_TERRAIN
+#if AP_TERRAIN_AVAILABLE
     AP_Terrain terrain{mission};
 #endif
 

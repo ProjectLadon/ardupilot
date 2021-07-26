@@ -532,7 +532,7 @@ class AutoTestPlane(AutoTest):
         self.wait_waypoint(1, num_wp, max_dist=60)
         self.wait_groundspeed(0, 0.5, timeout=mission_timeout)
         if quadplane:
-            self.wait_statustext("Throttle disarmed", timeout=60)
+            self.wait_statustext("Throttle disarmed", timeout=70)
         else:
             self.wait_statustext("Auto disarmed", timeout=60)
         self.progress("Mission OK")
@@ -1591,7 +1591,7 @@ class AutoTestPlane(AutoTest):
         m = self.mav.recv_match(type='AIRSPEED_AUTOCAL',
                                 blocking=True,
                                 timeout=5)
-        self.wait_waypoint(7, num_wp-1, timeout=500)
+        self.wait_waypoint(7, num_wp-1, max_dist=5, timeout=500)
         self.wait_disarmed(timeout=120)
 
     def deadreckoning_main(self, disable_airspeed_sensor=False):
@@ -2193,12 +2193,44 @@ class AutoTestPlane(AutoTest):
         self.progress("Mission OK")
 
     def test_airspeed_drivers(self):
-        self.set_parameter("ARSPD_BUS", 2)
-        self.set_parameter("ARSPD_TYPE", 7)  # DLVR
+        airspeed_sensors = [
+            ("MS5525", 3, 1),
+            ("DLVR", 7, 2),
+        ]
+        for (name, t, bus) in airspeed_sensors:
+            self.context_push()
+            if bus is not None:
+                self.set_parameter("ARSPD2_BUS", bus)
+            self.set_parameter("ARSPD2_TYPE", t)
+            self.reboot_sitl()
+            self.wait_ready_to_arm()
+            self.arm_vehicle()
+
+            # insert listener to compare airspeeds:
+            airspeed = [None, None]
+
+            def check_airspeeds(mav, m):
+                m_type = m.get_type()
+                if (m_type == 'NAMED_VALUE_FLOAT' and
+                        m.name == 'AS2'):
+                    airspeed[1] = m.value
+                elif m_type == 'VFR_HUD':
+                    airspeed[0] = m.airspeed
+                else:
+                    return
+                if airspeed[0] is None or airspeed[1] is None:
+                    return
+                delta = abs(airspeed[0] - airspeed[1])
+                if delta > 2:
+                    raise NotAchievedException("Airspeed mismatch (as1=%f as2=%f)" % (airspeed[0], airspeed[1]))
+            self.install_message_hook_context(check_airspeeds)
+            self.fly_mission("ap1.txt", strict=False)
+            if airspeed[0] is None:
+                raise NotAchievedException("Never saw an airspeed1")
+            if airspeed[1] is None:
+                raise NotAchievedException("Never saw an airspeed2")
+            self.context_pop()
         self.reboot_sitl()
-        self.wait_ready_to_arm()
-        self.arm_vehicle()
-        self.fly_mission("ap1.txt", strict=False)
 
     def fly_terrain_mission(self):
 
@@ -2556,40 +2588,44 @@ class AutoTestPlane(AutoTest):
             self.start_subtest("AIRSPEED: Fail to constant value")
             self.context_push()
             self.context_collect("STATUSTEXT")
-            # create an airspeed sensor error by freezing to the
-            # current airspeed then changing the groundspeed
-            old_parameter = self.get_parameter("SIM_ARSPD_FAIL")
-            m = self.mav.recv_match(type='VFR_HUD', blocking=True)
-            self.set_parameter("SIM_ARSPD_FAIL", m.airspeed)
 
-            def change_speed():
+            old_parameter = self.get_parameter("SIM_ARSPD_FAIL")
+
+            def fail_speed():
                 self.change_mode("GUIDED")
+                loc = self.mav.location()
                 self.run_cmd_int(
                     mavutil.mavlink.MAV_CMD_DO_REPOSITION,
                     0,
                     0,
                     0,
                     0,
-                    12345, # lat* 1e7
-                    12345, # lon* 1e7
+                    int(loc.lat * 1e7),
+                    int(loc.lng * 1e7),
                     50    # alt
                 )
                 self.delay_sim_time(5)
-                new_target_groundspeed = m.groundspeed + 10
+                # create an airspeed sensor error by freezing to the
+                # current airspeed then changing the airspeed demand
+                # to a higher value and waiting for the TECS speed
+                # loop to diverge
+                m = self.mav.recv_match(type='VFR_HUD', blocking=True)
+                self.set_parameter("SIM_ARSPD_FAIL", m.airspeed)
                 self.run_cmd(
                     mavutil.mavlink.MAV_CMD_DO_CHANGE_SPEED,
-                    1, # groundspeed
-                    new_target_groundspeed,
+                    0, # airspeed
+                    30,
                     -1, # throttle / no change
                     0, # absolute values
                     0,
                     0,
                     0
                 )
-            self.wait_statustext(text="EKF3 lane switch", timeout=30, the_function=change_speed, check_context=True)
+            self.wait_statustext(text="EKF3 lane switch", timeout=30, the_function=fail_speed, check_context=True)
             if self.lane_switches != [1, 0, 1, 0, 1]:
                 raise NotAchievedException("Expected lane switch 1, got %s" % str(self.lane_switches[-1]))
             # Cleanup
+            self.set_parameter("SIM_ARSPD_FAIL", old_parameter)
             self.change_mode('CIRCLE')
             self.context_pop()
             self.context_clear_collection("STATUSTEXT")

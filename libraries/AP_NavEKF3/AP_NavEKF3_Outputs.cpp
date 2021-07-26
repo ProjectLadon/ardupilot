@@ -207,8 +207,7 @@ bool NavEKF3_core::getPosNE(Vector2f &posNE) const
     if (PV_AidingMode != AID_NONE) {
         // This is the normal mode of operation where we can use the EKF position states
         // correct for the IMU offset (EKF calculations are at the IMU)
-        posNE.x = outputDataNew.position.x + posOffsetNED.x;
-        posNE.y = outputDataNew.position.y + posOffsetNED.y;
+        posNE = (outputDataNew.position.xy() + posOffsetNED.xy() + public_origin.get_distance_NE_ftype(EKF_origin)).tofloat();
         return true;
 
     } else {
@@ -218,9 +217,7 @@ bool NavEKF3_core::getPosNE(Vector2f &posNE) const
             if ((gps.status(selected_gps) >= AP_DAL_GPS::GPS_OK_FIX_2D)) {
                 // If the origin has been set and we have GPS, then return the GPS position relative to the origin
                 const struct Location &gpsloc = gps.location(selected_gps);
-                const Vector2F tempPosNE = EKF_origin.get_distance_NE_ftype(gpsloc);
-                posNE.x = tempPosNE.x;
-                posNE.y = tempPosNE.y;
+                posNE = public_origin.get_distance_NE_ftype(gpsloc).tofloat();
                 return false;
             } else if (rngBcnAlignmentStarted) {
                 // If we are attempting alignment using range beacon data, then report the position
@@ -229,14 +226,12 @@ bool NavEKF3_core::getPosNE(Vector2f &posNE) const
                 return false;
             } else {
                 // If no GPS fix is available, all we can do is provide the last known position
-                posNE.x = outputDataNew.position.x;
-                posNE.y = outputDataNew.position.y;
+                posNE = outputDataNew.position.xy().tofloat();
                 return false;
             }
         } else {
             // If the origin has not been set, then we have no means of providing a relative position
-            posNE.x = 0.0f;
-            posNE.y = 0.0f;
+            posNE.zero();
             return false;
         }
     }
@@ -357,7 +352,7 @@ void NavEKF3_core::getEkfControlLimits(float &ekfGndSpdLimit, float &ekfNavVelGa
 bool NavEKF3_core::getOriginLLH(struct Location &loc) const
 {
     if (validOrigin) {
-        loc = EKF_origin;
+        loc = public_origin;
         // report internally corrected reference height if enabled
         if ((frontend->_originHgtMode & (1<<2)) == 0) {
             loc.alt = (int32_t)(100.0f * (float)ekfGpsRefHgt);
@@ -410,7 +405,7 @@ uint8_t NavEKF3_core::getActiveAirspeed() const
 }
 
 // return the innovations for the NED Pos, NED Vel, XYZ Mag and Vtas measurements
-void  NavEKF3_core::getInnovations(Vector3f &velInnov, Vector3f &posInnov, Vector3f &magInnov, float &tasInnov, float &yawInnov) const
+bool NavEKF3_core::getInnovations(Vector3f &velInnov, Vector3f &posInnov, Vector3f &magInnov, float &tasInnov, float &yawInnov) const
 {
     velInnov.x = innovVelPos[0];
     velInnov.y = innovVelPos[1];
@@ -423,6 +418,7 @@ void  NavEKF3_core::getInnovations(Vector3f &velInnov, Vector3f &posInnov, Vecto
     magInnov.z = 1e3f*innovMag[2]; // Convert back to sensor units
     tasInnov   = innovVtas;
     yawInnov   = innovYaw;
+    return true;
 }
 
 // return the synthetic air data drag and sideslip innovations
@@ -438,7 +434,7 @@ void NavEKF3_core::getSynthAirDataInnovations(Vector2f &dragInnov, float &betaIn
 // return the innovation consistency test ratios for the velocity, position, magnetometer and true airspeed measurements
 // this indicates the amount of margin available when tuning the various error traps
 // also return the delta in position due to the last position reset
-void  NavEKF3_core::getVariances(float &velVar, float &posVar, float &hgtVar, Vector3f &magVar, float &tasVar, Vector2f &offset) const
+bool NavEKF3_core::getVariances(float &velVar, float &posVar, float &hgtVar, Vector3f &magVar, float &tasVar, Vector2f &offset) const
 {
     velVar   = sqrtF(velTestRatio);
     posVar   = sqrtF(posTestRatio);
@@ -449,6 +445,8 @@ void  NavEKF3_core::getVariances(float &velVar, float &posVar, float &hgtVar, Ve
     magVar.z = sqrtF(MAX(magTestRatio.z,yawTestRatio));
     tasVar   = sqrtF(tasTestRatio);
     offset   = posResetNE.tofloat();
+
+    return true;
 }
 
 // get a particular source's velocity innovations
@@ -555,7 +553,7 @@ void NavEKF3_core::send_status_report(mavlink_channel_t chan) const
     }
 
     // get variances
-    float velVar, posVar, hgtVar, tasVar;
+    float velVar = 0, posVar = 0, hgtVar = 0, tasVar = 0;
     Vector3f magVar;
     Vector2f offset;
     getVariances(velVar, posVar, hgtVar, magVar, tasVar, offset);

@@ -7,10 +7,10 @@
 int hal = 0;
 
 
-class DummyAHRS: AP_AHRS_NavEKF {
+class DummyAHRS: AP_AHRS {
 public:
     DummyAHRS(uint8_t flags = 0) :
-    AP_AHRS_NavEKF(flags) {};
+    AP_AHRS(flags) {};
     void unset_home() { _home_is_set = false; };
     bool set_home(const Location &loc) override WARN_IF_UNUSED {
         // check location is valid
@@ -58,7 +58,7 @@ public:
     bool start_cmd(const AP_Mission::Mission_Command& cmd) { return true; };
     bool verify_cmd(const AP_Mission::Mission_Command& cmd) { return true; };
     void mission_complete() { };
-    DummyAHRS ahrs{AP_AHRS_NavEKF::FLAG_ALWAYS_USE_EKF};
+    DummyAHRS ahrs{AP_AHRS::FLAG_ALWAYS_USE_EKF};
 
     AP_Mission mission{
         FUNCTOR_BIND_MEMBER(&DummyVehicle::start_cmd, bool, const AP_Mission::Mission_Command &),
@@ -104,7 +104,7 @@ TEST(Location, LatLngWrapping)
         int32_t expected_lat;
         int32_t expected_lng;
     } tests[] {
-        {519634000, 1797560000, Vector2f{0, 100000}, 519634000, -1787860774}
+        {519634000, 1797560000, Vector2f{0, 100000}, 519634000, -1787860775}
     };
 
     for (auto &test : tests) {
@@ -139,15 +139,15 @@ TEST(Location, LocOffsetDouble)
                -353632620, 1491652373,
                Vector2d{4682795.4576701336, 5953662.7673837934},
                Vector2d{4682797.1904749088, 5953664.1586009059},
-               Vector2d{1.7365739867091179,1.4261966},
+               Vector2d{1.7365739867091179,1.2050807},
     };
 
     for (auto &test : tests) {
         Location home{test.home_lat, test.home_lng, 0, Location::AltFrame::ABOVE_HOME};
         Location loc1 = home;
         Location loc2 = home;
-        loc1.offset_double(test.delta_metres_ne1.x, test.delta_metres_ne1.y);
-        loc2.offset_double(test.delta_metres_ne2.x, test.delta_metres_ne2.y);
+        loc1.offset(test.delta_metres_ne1.x, test.delta_metres_ne1.y);
+        loc2.offset(test.delta_metres_ne2.x, test.delta_metres_ne2.y);
         Vector2d diff = loc1.get_distance_NE_double(loc2);
         EXPECT_FLOAT_EQ(diff.x, test.expected_pos_change.x);
         EXPECT_FLOAT_EQ(diff.y, test.expected_pos_change.y);
@@ -212,6 +212,7 @@ TEST(Location, Tests)
     EXPECT_EQ(Location::AltFrame::ABOVE_TERRAIN, test_location3.get_alt_frame());
 
     // No TERRAIN, NO HOME, NO ORIGIN
+    AP::terrain()->set_enabled(false);
     for (auto current_frame = Location::AltFrame::ABSOLUTE;
          current_frame <= Location::AltFrame::ABOVE_TERRAIN;
          current_frame = static_cast<Location::AltFrame>(
@@ -267,7 +268,7 @@ TEST(Location, Tests)
         }
     }
     // NO Origin
-    Location::set_terrain(&vehicle.terrain);
+    AP::terrain()->set_enabled(true);
     for (auto current_frame = Location::AltFrame::ABSOLUTE;
          current_frame <= Location::AltFrame::ABOVE_TERRAIN;
          current_frame = static_cast<Location::AltFrame>(

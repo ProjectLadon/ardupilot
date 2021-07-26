@@ -1209,6 +1209,7 @@ class AutoTest(ABC):
                  _show_test_timings=False,
                  logs_dir=None,
                  force_ahrs_type=None,
+                 replay=False,
                  sup_binaries=[]):
 
         self.start_time = time.time()
@@ -1253,6 +1254,7 @@ class AutoTest(ABC):
         self.total_waiting_to_arm_time = 0
         self.waiting_to_arm_count = 0
         self.force_ahrs_type = force_ahrs_type
+        self.replay = replay
         if self.force_ahrs_type is not None:
             self.force_ahrs_type = int(self.force_ahrs_type)
         self.logs_dir = logs_dir
@@ -2170,6 +2172,8 @@ class AutoTest(ABC):
             if self.force_ahrs_type == 3:
                 ret["EK3_ENABLE"] = 1
             ret["AHRS_EKF_TYPE"] = self.force_ahrs_type
+        if self.replay:
+            ret["LOG_REPLAY"] = 1
         return ret
 
     def apply_default_parameter_list(self):
@@ -4028,6 +4032,7 @@ class AutoTest(ABC):
         autopilot_values = {}
         for i in range(attempts):
             self.drain_mav(quiet=True)
+            self.drain_all_pexpects()
             received = set()
             for (name, value) in want.items():
                 if verbose:
@@ -4474,6 +4479,11 @@ class AutoTest(ABC):
         # dlong /= 10000000.0
         #
         # return math.sqrt((dlat*dlat) + (dlong*dlong)) * 1.113195e5
+
+    def bearing_to(self, loc):
+        '''return bearing from here to location'''
+        here = self.mav.location()
+        return self.get_bearing(here, loc)
 
     @staticmethod
     def get_bearing(loc1, loc2):
@@ -5853,6 +5863,10 @@ Also, ignores heartbeats not from our target system'''
         except Exception:
             # process is dead
             self.progress("Not alive after test", send_statustext=False)
+            if self.sitl.isalive():
+                self.progress("pexpect says it is alive")
+            else:
+                self.progress("pexpect says it is dead")
             passed = False
             reset_needed = True
 

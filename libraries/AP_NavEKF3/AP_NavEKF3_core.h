@@ -96,6 +96,20 @@
 #define EK3_POSXY_STATE_LIMIT 1.0e6
 #endif
 
+// IMU acceleration process noise in m/s/s used when bad vibration affected IMU accel is detected
+#define BAD_IMU_DATA_ACC_P_NSE 5.0f
+
+// Number of milliseconds of bad IMU data before a reset to vertical position and velocity height sources is performed
+#define BAD_IMU_DATA_TIMEOUT_MS 1000
+
+// number of milliseconds the bad IMU data response settings will be held after the last bad IMU data is detected
+#define BAD_IMU_DATA_HOLD_MS 10000
+
+// wind state variance limits
+#define WIND_VEL_VARIANCE_MAX 400.0f
+#define WIND_VEL_VARIANCE_MIN 0.25f
+
+
 class NavEKF3_core : public NavEKF_core_common
 {
 public:
@@ -209,13 +223,13 @@ public:
     void getQuaternion(Quaternion &quat) const;
 
     // return the innovations for the NED Pos, NED Vel, XYZ Mag and Vtas measurements
-    void getInnovations(Vector3f &velInnov, Vector3f &posInnov, Vector3f &magInnov, float &tasInnov, float &yawInnov) const;
+    bool getInnovations(Vector3f &velInnov, Vector3f &posInnov, Vector3f &magInnov, float &tasInnov, float &yawInnov) const;
 
     // return the synthetic air data drag and sideslip innovations
     void getSynthAirDataInnovations(Vector2f &dragInnov, float &betaInnov) const;
 
    // return the innovation consistency test ratios for the velocity, position, magnetometer and true airspeed measurements
-    void getVariances(float &velVar, float &posVar, float &hgtVar, Vector3f &magVar, float &tasVar, Vector2f &offset) const;
+    bool getVariances(float &velVar, float &posVar, float &hgtVar, Vector3f &magVar, float &tasVar, Vector2f &offset) const;
 
     // get a particular source's velocity innovations
     // returns true on success and results are placed in innovations and variances arguments
@@ -401,6 +415,9 @@ public:
 
     void Log_Write(uint64_t time_us);
 
+    // returns true when the state estimates are significantly degraded by vibration
+    bool isVibrationAffected() const { return badIMUdata; }
+
 private:
     EKFGSF_yaw *yawEstimator;
     AP_DAL &dal;
@@ -499,7 +516,7 @@ private:
     };
 
     struct gps_elements : EKF_obs_element_t {
-        Vector2F    pos;            // horizontal North East position of the GPS antenna in local NED earth frame (m)
+        int32_t     lat, lng;       // latitude and longitude in 1e7 degrees
         ftype       hgt;            // height of the GPS antenna in local NED earth frame (m)
         Vector3F    vel;            // velocity of the GPS antenna in local NED earth frame (m/sec)
         uint8_t     sensor_idx;     // unique integer identifying the GPS sensor
@@ -529,6 +546,7 @@ private:
 
     struct tas_elements : EKF_obs_element_t {
         ftype       tas;            // true airspeed measurement (m/sec)
+        ftype       tasVariance;    // variance of true airspeed measurement (m/sec)^2
     };
 
     struct of_elements : EKF_obs_element_t {
@@ -695,6 +713,9 @@ private:
 
     // check for new valid GPS data and update stored measurement if available
     void readGpsData();
+
+    // check for new valid GPS yaw data
+    void readGpsYawData();
 
     // check for new altitude measurement data and update stored measurement if available
     void readBaroData();
@@ -952,6 +973,8 @@ private:
     bool magTimeout;                // boolean true if magnetometer measurements have failed for too long and have timed out
     bool tasTimeout;                // boolean true if true airspeed measurements have failed for too long and have timed out
     bool badIMUdata;                // boolean true if the bad IMU data is detected
+    uint32_t badIMUdata_ms;         // time stamp bad IMU data was last detected
+    uint32_t goodIMUdata_ms;        // time stamp good IMU data was last detected
     uint32_t vertVelVarClipCounter; // counter used to control reset of vertical velocity variance following collapse against the lower limit
 
     ftype gpsNoiseScaler;           // Used to scale the  GPS measurement noise and consistency gates to compensate for operation with small satellite counts
@@ -1019,13 +1042,15 @@ private:
     Vector3F magTestRatio;          // sum of squares of magnetometer innovations divided by fail threshold
     ftype tasTestRatio;             // sum of squares of true airspeed innovation divided by fail threshold
     bool inhibitWindStates;         // true when wind states and covariances are to remain constant
+    bool windStatesAligned;         // true when wind states have been aligned
     bool inhibitMagStates;          // true when magnetic field states are inactive
     bool lastInhibitMagStates;      // previous inhibitMagStates
     bool needMagBodyVarReset;       // we need to reset mag body variances at next CovariancePrediction
     bool needEarthBodyVarReset;     // we need to reset mag earth variances at next CovariancePrediction
     bool inhibitDelAngBiasStates;   // true when IMU delta angle bias states are inactive
     bool gpsNotAvailable;           // bool true when valid GPS data is not available
-    struct Location EKF_origin;     // LLH origin of the NED axis system
+    struct Location EKF_origin;     // LLH origin of the NED axis system, internal only
+    struct Location &public_origin; // LLH origin of the NED axis system, public functions
     bool validOrigin;               // true when the EKF origin is valid
     ftype gpsSpdAccuracy;           // estimated speed accuracy in m/s returned by the GPS receiver
     ftype gpsPosAccuracy;           // estimated position accuracy in m returned by the GPS receiver
@@ -1051,7 +1076,6 @@ private:
     range_elements rangeDataDelayed;// Range finder data at the fusion time horizon
     tas_elements tasDataNew;        // TAS data at the current time horizon
     tas_elements tasDataDelayed;    // TAS data at the fusion time horizon
-    ftype tasErrVar;                // TAS error variance (m/s)**2
     bool usingDefaultAirspeed;      // true when a default airspeed is being used instead of a measured value
     mag_elements magDataDelayed;    // Magnetometer data at the fusion time horizon
     gps_elements gpsDataNew;        // GPS data at the current time horizon
@@ -1403,7 +1427,13 @@ private:
     bool have_table_earth_field;   // true when we have initialised table_earth_field_ga
     Vector3F table_earth_field_ga; // earth field from WMM tables
     ftype table_declination;       // declination in radians from the tables
-    uint32_t last_field_update_ms;
+
+    // 1Hz update
+    uint32_t last_oneHz_ms;
+    void oneHzUpdate(void);
+
+    // move EKF origin at 1Hz
+    void moveEKFOrigin(void);
 
     // handle earth field updates
     void getEarthFieldTable(const Location &loc);

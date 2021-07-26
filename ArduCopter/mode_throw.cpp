@@ -51,12 +51,16 @@ void ModeThrow::run()
         stage = Throw_Detecting;
 
     } else if (stage == Throw_Detecting && throw_detected()){
-        gcs().send_text(MAV_SEVERITY_INFO,"throw detected - uprighting");
-        stage = Throw_Uprighting;
+        gcs().send_text(MAV_SEVERITY_INFO,"throw detected - spooling motors");
+        stage = Throw_Wait_Throttle_Unlimited;
 
         // Cancel the waiting for throw tone sequence
         AP_Notify::flags.waiting_for_throw = false;
 
+    } else if (stage == Throw_Wait_Throttle_Unlimited &&
+               motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
+        gcs().send_text(MAV_SEVERITY_INFO,"throttle is unlimited - uprighting");
+        stage = Throw_Uprighting;
     } else if (stage == Throw_Uprighting && throw_attitude_good()) {
         gcs().send_text(MAV_SEVERITY_INFO,"uprighted - controlling height");
         stage = Throw_HgtStabilise;
@@ -137,6 +141,13 @@ void ModeThrow::run()
 
         // Play the waiting for throw tone sequence to alert the user
         AP_Notify::flags.waiting_for_throw = true;
+
+        break;
+
+    case Throw_Wait_Throttle_Unlimited:
+
+        // set motors to full range
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
         break;
 
@@ -276,22 +287,23 @@ bool ModeThrow::throw_detected()
     return throw_condition_confirmed;
 }
 
-bool ModeThrow::throw_attitude_good()
+bool ModeThrow::throw_attitude_good() const
 {
     // Check that we have uprighted the copter
     const Matrix3f &rotMat = ahrs.get_rotation_body_to_ned();
     return (rotMat.c.z > 0.866f); // is_upright
 }
 
-bool ModeThrow::throw_height_good()
+bool ModeThrow::throw_height_good() const
 {
     // Check that we are within 0.5m of the demanded height
     return (pos_control->get_pos_error_z_cm() < 50.0f);
 }
 
-bool ModeThrow::throw_position_good()
+bool ModeThrow::throw_position_good() const
 {
     // check that our horizontal position error is within 50cm
     return (pos_control->get_pos_error_xy_cm() < 50.0f);
 }
+
 #endif

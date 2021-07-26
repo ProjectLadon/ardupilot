@@ -79,7 +79,7 @@ public:
     virtual bool requires_terrain_failsafe() const { return false; }
 
     // functions for reporting to GCS
-    virtual bool get_wp(Location &loc) { return false; };
+    virtual bool get_wp(Location &loc) const { return false; };
     virtual int32_t wp_bearing() const { return 0; }
     virtual uint32_t wp_distance() const { return 0; }
     virtual float crosstrack_error() const { return 0.0f;}
@@ -419,7 +419,7 @@ protected:
     uint32_t wp_distance() const override;
     int32_t wp_bearing() const override;
     float crosstrack_error() const override { return wp_nav->crosstrack_error();}
-    bool get_wp(Location &loc) override;
+    bool get_wp(Location &loc) const override;
 
 private:
 
@@ -850,7 +850,7 @@ public:
     void set_angle(const Quaternion &q, float climb_rate_cms_or_thrust, bool use_yaw_rate, float yaw_rate_rads, bool use_thrust);
     bool set_destination(const Vector3f& destination, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false, bool terrain_alt = false);
     bool set_destination(const Location& dest_loc, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false);
-    bool get_wp(Location &loc) override;
+    bool get_wp(Location &loc) const override;
     void set_accel(const Vector3f& acceleration, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false, bool log_request = true);
     void set_velocity(const Vector3f& velocity, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false, bool log_request = true);
     void set_velaccel(const Vector3f& velocity, const Vector3f& acceleration, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false, bool log_request = true);
@@ -1028,6 +1028,7 @@ protected:
 
     uint32_t wp_distance() const override;
     int32_t wp_bearing() const override;
+    float crosstrack_error() const override { return pos_control->crosstrack_error();}
 
 #if PRECISION_LANDING == ENABLED
     bool do_precision_loiter();
@@ -1148,7 +1149,7 @@ public:
     bool requires_terrain_failsafe() const override { return true; }
 
     // for reporting to GCS
-    bool get_wp(Location &loc) override;
+    bool get_wp(Location &loc) const override;
 
     // RTL states
     enum class SubMode : uint8_t {
@@ -1272,7 +1273,7 @@ protected:
     const char *name4() const override { return "SRTL"; }
 
     // for reporting to GCS
-    bool get_wp(Location &loc) override;
+    bool get_wp(Location &loc) const override;
     uint32_t wp_distance() const override;
     int32_t wp_bearing() const override;
     float crosstrack_error() const override { return wp_nav->crosstrack_error();}
@@ -1465,14 +1466,15 @@ protected:
 private:
 
     bool throw_detected();
-    bool throw_position_good();
-    bool throw_height_good();
-    bool throw_attitude_good();
+    bool throw_position_good() const;
+    bool throw_height_good() const;
+    bool throw_attitude_good() const;
 
     // Throw stages
     enum ThrowModeStage {
         Throw_Disarmed,
         Throw_Detecting,
+        Throw_Wait_Throttle_Unlimited,
         Throw_Uprighting,
         Throw_HgtStabilise,
         Throw_PosHold
@@ -1537,7 +1539,7 @@ protected:
     const char *name4() const override { return "FOLL"; }
 
     // for reporting to GCS
-    bool get_wp(Location &loc) override;
+    bool get_wp(Location &loc) const override;
     uint32_t wp_distance() const override;
     int32_t wp_bearing() const override;
 

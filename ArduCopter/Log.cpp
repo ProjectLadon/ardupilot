@@ -27,7 +27,7 @@ void Copter::Log_Write_Control_Tuning()
 {
     // get terrain altitude
     float terr_alt = 0.0f;
-#if AP_TERRAIN_AVAILABLE && AC_TERRAIN
+#if AP_TERRAIN_AVAILABLE
     if (!terrain.height_above_terrain(terr_alt, true)) {
         terr_alt = logger.quiet_nan();
     }
@@ -86,7 +86,7 @@ void Copter::Log_Write_Attitude()
 // Write an EKF and POS packet
 void Copter::Log_Write_EKF_POS()
 {
-    AP::ahrs_navekf().Log_Write();
+    AP::ahrs().Log_Write();
     ahrs.Write_AHRS2();
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     sitl.Log_Write_SIMSTATE();

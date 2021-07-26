@@ -308,6 +308,16 @@ void UARTDriver::begin(uint32_t b, uint16_t rxS, uint16_t txS)
     }
 #endif
 
+#if defined(USART_CR1_FIFOEN)
+    // enable the UART FIFO on G4 and H7. This allows for much higher baudrates
+    // without data loss when not using DMA
+    if (_last_options & OPTION_NOFIFO) {
+        _cr1_options &= ~USART_CR1_FIFOEN;
+    } else {
+        _cr1_options |= USART_CR1_FIFOEN;
+    }
+#endif
+
     /*
       allocate the write buffer
      */
@@ -559,6 +569,17 @@ void UARTDriver::rxbuff_full_irq(void* self, uint32_t flags)
 
 void UARTDriver::begin(uint32_t b)
 {
+    if (lock_write_key != 0) {
+        return;
+    }
+    begin(b, 0, 0);
+}
+
+void UARTDriver::begin_locked(uint32_t b, uint32_t key)
+{
+    if (lock_write_key != 0 && key != lock_write_key) {
+        return;
+    }
     begin(b, 0, 0);
 }
 
@@ -607,6 +628,20 @@ void UARTDriver::set_blocking_writes(bool blocking)
 }
 
 bool UARTDriver::tx_pending() { return false; }
+
+
+/*
+    get the requested usb baudrate - 0 = none
+*/
+uint32_t UARTDriver::get_usb_baud() const
+{
+#if HAL_USE_SERIAL_USB
+    if (sdef.is_usb) {
+        return ::get_usb_baud(sdef.endpoint_id);
+    }
+#endif
+    return 0;
+}
 
 /* Empty implementations of Stream virtual methods */
 uint32_t UARTDriver::available() {
@@ -899,7 +934,13 @@ void UARTDriver::write_pending_bytes_DMA(uint32_t n)
         chEvtGetAndClearEvents(EVT_TRANSMIT_DMA_COMPLETE);
 
         if (dma_handle->has_contention()) {
-            if (_baudrate <= 115200) {
+            // on boards with a hw fifo we can use a higher threshold for disabling DMA
+#if defined(USART_CR1_FIFOEN)
+            const uint32_t baud_threshold = 460800;
+#else
+            const uint32_t baud_threshold = 115200;
+#endif
+            if (_baudrate <= baud_threshold) {
                 contention_counter += 3;
                 if (contention_counter > 1000) {
                     // more than 25% of attempts to use this DMA
