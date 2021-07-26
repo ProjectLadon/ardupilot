@@ -56,6 +56,7 @@ void ModeAcro::update()
     // }
 
     set_steering(steering_out * 4500.0f);
+    g2.motors.set_sail_differential(steering_out * 100.0f);
 }
 
 bool ModeAcro::requires_velocity() const
