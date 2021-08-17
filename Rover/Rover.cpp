@@ -109,6 +109,9 @@ const AP_Scheduler::Task Rover::scheduler_tasks[] = {
     SCHED_TASK(afs_fs_check,           10,    200),
 #endif
     SCHED_TASK(read_airspeed,          10,    100),
+#if HAL_AIS_ENABLED
+    SCHED_TASK_CLASS(AP_AIS, &rover.g2.ais, update, 5, 100),
+#endif
 };
 
 
@@ -135,6 +138,7 @@ Rover::Rover(void) :
 {
 }
 
+#ifdef ENABLE_SCRIPTING
 // set target location (for use by scripting)
 bool Rover::set_target_location(const Location& target_loc)
 {
@@ -213,6 +217,7 @@ bool Rover::get_control_output(AP_Vehicle::ControlOutput control_output, float &
     }
     return false;
 }
+#endif // ENABLE_SCRIPTING
 
 #if STATS_ENABLED == ENABLED
 /*
