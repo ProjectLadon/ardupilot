@@ -102,7 +102,6 @@ public:
     // return the quaternion defining the rotation from NED to XYZ (body) axes
     bool get_quaternion(Quaternion &quat) const override WARN_IF_UNUSED;
 
-    bool set_home(const Location &loc) override WARN_IF_UNUSED;
     void estimate_wind(void);
 
     // is the AHRS subsystem healthy?
@@ -128,11 +127,10 @@ private:
     bool            renorm(Vector3f const &a, Vector3f &result);
     void            drift_correction(float deltat);
     void            drift_correction_yaw(void);
-    float           yaw_error_compass();
+    float           yaw_error_compass(class Compass &compass);
     void            euler_angles(void);
     bool            have_gps(void) const;
     bool            use_fast_gains(void) const;
-    void            load_watchdog_home();
     void            backup_attitude(void);
 
     // primary representation of attitude of board used for all inertial calculations
@@ -158,11 +156,21 @@ private:
     // P term yaw gain based on rate of change of horiz velocity
     float           _yaw_gain(void) const;
 
+    /* returns true if attitude should be corrected from GPS-derived
+     * velocity-deltas.  We turn this off for Copter and other similar
+     * vehicles while the vehicle is disarmed to avoid the HUD bobbing
+     * around while the vehicle is disarmed.
+     */
+    bool should_correct_centrifugal() const;
+
     // state to support status reporting
     float _renorm_val_sum;
     uint16_t _renorm_val_count;
     float _error_rp{1.0f};
     float _error_yaw{1.0f};
+
+    // time in microseconds of last compass update
+    uint32_t _compass_last_update;
 
     // time in millis when we last got a GPS heading
     uint32_t _gps_last_update;

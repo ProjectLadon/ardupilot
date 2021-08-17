@@ -197,8 +197,9 @@ public:
         MODE_SWITCH_RESET =   96, // trigger re-reading of mode switch
         WIND_VANE_DIR_OFSSET= 97, // flag for windvane direction offset input, used with windvane type 2
         TRAINING            = 98, // mode training
+        AUTO_RTL =            99, // AUTO RTL via DO_LAND_START
 
-        // entries from 100 onwards are expected to be developer
+        // entries from 100-150  are expected to be developer
         // options used for testing
         KILL_IMU1 =          100, // disable first IMU (for IMU failure testing)
         KILL_IMU2 =          101, // disable second IMU (for IMU failure testing)
@@ -214,6 +215,9 @@ public:
         SAIL_DIFF =          127,
         FLAP_LIM_FWD =       128,
         FLAP_LIM_MIZZ =      129,
+        // options 150-199 continue user rc switch options
+        CRUISE =             150,  ///CRUISE mode
+        TURTLE =             151,  // Turtle mode - flip over after crash
 
         // inputs from 200 will eventually used to replace RCMAP
         ROLL =               201, // roll input
@@ -301,7 +305,7 @@ protected:
     void do_aux_function_clear_wp(const AuxSwitchPos ch_flag);
     void do_aux_function_gripper(const AuxSwitchPos ch_flag);
     void do_aux_function_lost_vehicle_sound(const AuxSwitchPos ch_flag);
-    virtual void do_aux_function_mission_reset(const AuxSwitchPos ch_flag);
+    void do_aux_function_mission_reset(const AuxSwitchPos ch_flag);
     void do_aux_function_rc_override_enable(const AuxSwitchPos ch_flag);
     void do_aux_function_relay(uint8_t relay, bool val);
     void do_aux_function_sprayer(const AuxSwitchPos ch_flag);

@@ -178,6 +178,7 @@ public:
     // returns true if the vehicle has crashed
     virtual bool is_crashed() const;
 
+#ifdef ENABLE_SCRIPTING
     /*
       methods to control vehicle for use by scripting
     */
@@ -192,6 +193,8 @@ public:
 
     // set steering and throttle (-1 to +1) (for use by scripting with Rover)
     virtual bool set_steering_and_throttle(float steering, float throttle) { return false; }
+#endif // ENABLE_SCRIPTING
+
 
     // control outputs enumeration
     enum class ControlOutput {
@@ -248,6 +251,11 @@ public:
       Returns the pan and tilt for use by onvif camera in scripting
      */
     virtual bool get_pan_tilt_norm(float &pan_norm, float &tilt_norm) const { return false; }
+
+#if OSD_ENABLED
+   // Returns roll and  pitch for OSD Horizon, Plane overrides to correct for VTOL view and fixed wing TRIM_PITCH_CD
+    virtual void get_osd_roll_pitch_rad(float &roll, float &pitch) const;
+#endif
 
 protected:
 

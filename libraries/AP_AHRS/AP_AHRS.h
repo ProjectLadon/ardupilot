@@ -51,6 +51,8 @@ class AP_AHRS_View;
 
 #define AP_AHRS_NAVEKF_SETTLE_TIME_MS 20000     // time in milliseconds the ekf needs to settle after being started
 
+#include <AP_NMEA_Output/AP_NMEA_Output.h>
+
 class AP_AHRS : public AP_AHRS_DCM {
     friend class AP_AHRS_View;
 public:
@@ -72,6 +74,10 @@ public:
     static AP_AHRS *get_singleton() {
         return _singleton;
     }
+
+    // allow for runtime change of orientation
+    // this makes initial config easier
+    void update_orientation();
 
     // return the smoothed gyro vector corrected for drift
     const Vector3f &get_gyro(void) const override;
@@ -138,10 +144,10 @@ public:
     // set the EKF's origin location in 10e7 degrees.  This should only
     // be called when the EKF has no absolute position reference (i.e. GPS)
     // from which to decide the origin on its own
-    bool set_origin(const Location &loc) override WARN_IF_UNUSED;
+    bool set_origin(const Location &loc) WARN_IF_UNUSED;
 
     // returns the inertial navigation origin in lat/lon/alt
-    bool get_origin(Location &ret) const override WARN_IF_UNUSED;
+    bool get_origin(Location &ret) const WARN_IF_UNUSED;
 
     bool have_inertial_nav() const override;
 
@@ -322,12 +328,122 @@ public:
     // create a view
     AP_AHRS_View *create_view(enum Rotation rotation, float pitch_trim_deg=0);
 
+    // write AOA and SSA information to dataflash logs:
+    void Write_AOA_SSA(void) const;
+
+    // return AOA
+    float getAOA(void) const { return _AOA; }
+
+    // return SSA
+    float getSSA(void) const { return _SSA; }
+
+    /*
+     * trim-related functions
+     */
+
+    // get trim
+    const Vector3f &get_trim() const { return _trim.get(); }
+
+    // set trim
+    void set_trim(const Vector3f &new_trim);
+
+    // add_trim - adjust the roll and pitch trim up to a total of 10 degrees
+    void add_trim(float roll_in_radians, float pitch_in_radians, bool save_to_eeprom = true);
+
+    // trim rotation matrices:
+    const Matrix3f& get_rotation_autopilot_body_to_vehicle_body(void) const { return _rotation_autopilot_body_to_vehicle_body; }
+    const Matrix3f& get_rotation_vehicle_body_to_autopilot_body(void) const { return _rotation_vehicle_body_to_autopilot_body; }
+
+    /*
+     * home-related functionality
+     */
+
+    // get the home location. This is const to prevent any changes to
+    // home without telling AHRS about the change
+    const struct Location &get_home(void) const {
+        return _home;
+    }
+
+    // functions to handle locking of home.  Some vehicles use this to
+    // allow GCS to lock in a home location.
+    void lock_home() {
+        _home_locked = true;
+    }
+    bool home_is_locked() const {
+        return _home_locked;
+    }
+
+    // returns true if home is set
+    bool home_is_set(void) const {
+        return _home_is_set;
+    }
+
+    // set the home location in 10e7 degrees. This should be called
+    // when the vehicle is at this position. It is assumed that the
+    // current barometer and GPS altitudes correspond to this altitude
+    bool set_home(const Location &loc) WARN_IF_UNUSED;
+
+    void Log_Write_Home_And_Origin();
+
+    /*
+     * AHRS is used as a transport for vehicle-takeoff-expected and
+     * vehicle-landing-expected:
+     */
+    void set_takeoff_expected(bool b);
+
+    bool get_takeoff_expected(void) const {
+        return takeoff_expected;
+    }
+
+    void set_touchdown_expected(bool b);
+
+    bool get_touchdown_expected(void) const {
+        return touchdown_expected;
+    }
+
+    /*
+     * fly_forward is set by the vehicles to indicate the vehicle
+     * should generally be moving in the direction of its heading.
+     * It is an additional piece of information that the backends can
+     * use to provide additional and/or improved estimates.
+     */
+    void set_fly_forward(bool b) {
+        fly_forward = b;
+    }
+    bool get_fly_forward(void) const {
+        return fly_forward;
+    }
+
+    /* we modify our behaviour based on what sort of vehicle the
+     * vehicle code tells us we are.  This information is also pulled
+     * from AP_AHRS by other libraries
+     */
+    enum class VehicleClass : uint8_t {
+        UNKNOWN,
+        GROUND,
+        COPTER,
+        FIXED_WING,
+        SUBMARINE,
+    };
+    VehicleClass get_vehicle_class(void) const {
+        return _vehicle_class;
+    }
+    void set_vehicle_class(VehicleClass vclass) {
+        _vehicle_class = vclass;
+    }
+
 protected:
     // optional view class
     AP_AHRS_View *_view;
 
 private:
     static AP_AHRS *_singleton;
+
+    /* we modify our behaviour based on what sort of vehicle the
+     * vehicle code tells us we are.  This information is also pulled
+     * from AP_AHRS by other libraries
+     */
+    VehicleClass _vehicle_class{VehicleClass::UNKNOWN};
 
     enum class EKFType {
         NONE = 0
@@ -338,7 +454,7 @@ private:
         ,TWO = 2
 #endif
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-        ,SITL = 10
+        ,SIM = 10
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
         ,EXTERNAL = 11
@@ -381,6 +497,15 @@ private:
     // get the index of the current primary IMU
     uint8_t get_primary_IMU_index(void) const;
 
+    /*
+     * home-related state
+     */
+    void load_watchdog_home();
+    bool _checked_watchdog_home;
+    struct Location _home;
+    bool _home_is_set :1;
+    bool _home_locked :1;
+
     // avoid setting current state repeatedly across all cores on all EKFs:
     enum class TriState {
         False = 0,
@@ -390,10 +515,17 @@ private:
 
     TriState terrainHgtStableState = TriState::UNKNOWN;
 
+    /*
+     * private AOA and SSA-related state and methods
+     */
+    float _AOA, _SSA;
+    uint32_t _last_AOA_update_ms;
+    void update_AOA_SSA(void);
+
     EKFType last_active_ekf_type;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    SITL::SITL *_sitl;
+    SITL::SIM *_sitl;
     uint32_t _last_body_odm_update_ms;
     void update_SITL(void);
 #endif    
@@ -401,6 +533,46 @@ private:
 #if HAL_EXTERNAL_AHRS_ENABLED
     void update_external(void);
 #endif    
+
+    /*
+     * trim-related state and private methods:
+     */
+
+    // a vector to capture the difference between the controller and body frames
+    AP_Vector3f         _trim;
+
+    // cached trim rotations
+    Vector3f _last_trim;
+
+    Matrix3f _rotation_autopilot_body_to_vehicle_body;
+    Matrix3f _rotation_vehicle_body_to_autopilot_body;
+
+    // updates matrices responsible for rotating vectors from vehicle body
+    // frame to autopilot body frame from _trim variables
+    void update_trim_rotation_matrices();
+
+    /*
+     * AHRS is used as a transport for vehicle-takeoff-expected and
+     * vehicle-landing-expected:
+     */
+    // update takeoff/touchdown flags
+    void update_flags();
+    bool takeoff_expected;    // true if the vehicle is in a state that takeoff might be expected.  Ground effect may be in play.
+    uint32_t takeoff_expected_start_ms;
+    bool touchdown_expected;    // true if the vehicle is in a state that touchdown might be expected.  Ground effect may be in play.
+    uint32_t touchdown_expected_start_ms;
+
+    /*
+     * fly_forward is set by the vehicles to indicate the vehicle
+     * should generally be moving in the direction of its heading.
+     * It is an additional piece of information that the backends can
+     * use to provide additional and/or improved estimates.
+     */
+    bool fly_forward; // true if we can assume the vehicle will be flying forward on its X axis
+
+#if HAL_NMEA_OUTPUT_ENABLED
+    class AP_NMEA_Output* _nmea_out;
+#endif
 };
 
 namespace AP {

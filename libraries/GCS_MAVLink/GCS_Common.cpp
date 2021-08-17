@@ -47,6 +47,7 @@
 #include <AP_Winch/AP_Winch.h>
 #include <AP_OSD/AP_OSD.h>
 #include <AP_RCTelemetry/AP_CRSF_Telem.h>
+#include <AP_AIS/AP_AIS.h>
 
 #include <stdio.h>
 
@@ -851,6 +852,7 @@ ap_message GCS_MAVLINK::mavlink_id_to_ap_message_id(const uint32_t mavlink_id) c
         { MAVLINK_MSG_ID_WINCH_STATUS,          MSG_WINCH_STATUS},
         { MAVLINK_MSG_ID_WATER_DEPTH,           MSG_WATER_DEPTH},
         { MAVLINK_MSG_ID_HIGH_LATENCY2,         MSG_HIGH_LATENCY2},
+        { MAVLINK_MSG_ID_AIS_VESSEL,            MSG_AIS_VESSEL},
             };
 
     for (uint8_t i=0; i<ARRAY_SIZE(map); i++) {
@@ -3648,7 +3650,7 @@ void GCS_MAVLINK::send_banner()
 void GCS_MAVLINK::send_simstate() const
 {
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    SITL::SITL *sitl = AP::sitl();
+    SITL::SIM *sitl = AP::sitl();
     if (sitl == nullptr) {
         return;
     }
@@ -3659,7 +3661,7 @@ void GCS_MAVLINK::send_simstate() const
 void GCS_MAVLINK::send_sim_state() const
 {
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    SITL::SITL *sitl = AP::sitl();
+    SITL::SIM *sitl = AP::sitl();
     if (sitl == nullptr) {
         return;
     }
@@ -4021,7 +4023,8 @@ MAV_RESULT GCS_MAVLINK::handle_command_do_sprayer(const mavlink_command_long_t &
 
 MAV_RESULT GCS_MAVLINK::handle_command_accelcal_vehicle_pos(const mavlink_command_long_t &packet)
 {
-    if (!AP::ins().get_acal()->gcs_vehicle_position(packet.param1)) {
+    if (AP::ins().get_acal() == nullptr ||
+        !AP::ins().get_acal()->gcs_vehicle_position(packet.param1)) {
         return MAV_RESULT_FAILED;
     }
     return MAV_RESULT_ACCEPTED;
@@ -4648,7 +4651,7 @@ void GCS_MAVLINK::send_attitude_quaternion() const
 {
     const AP_AHRS &ahrs = AP::ahrs();
     Quaternion quat;
-    if (!ahrs.get_secondary_quaternion(quat)) {
+    if (!ahrs.get_quaternion(quat)) {
         return;
     }
     const Vector3f omega = ahrs.get_gyro();

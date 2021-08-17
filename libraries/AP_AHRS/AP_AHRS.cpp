@@ -112,7 +112,7 @@ const AP_Param::GroupInfo AP_AHRS::var_info[] = {
     // @Param: ORIENTATION
     // @DisplayName: Board Orientation
     // @Description: Overall board orientation relative to the standard orientation for the board type. This rotates the IMU and compass readings to allow the board to be oriented in your vehicle at any 90 or 45 degree angle. This option takes affect on next boot. After changing you will need to re-level your vehicle.
-    // @Values: 0:None,1:Yaw45,2:Yaw90,3:Yaw135,4:Yaw180,5:Yaw225,6:Yaw270,7:Yaw315,8:Roll180,9:Roll180Yaw45,10:Roll180Yaw90,11:Roll180Yaw135,12:Pitch180,13:Roll180Yaw225,14:Roll180Yaw270,15:Roll180Yaw315,16:Roll90,17:Roll90Yaw45,18:Roll90Yaw90,19:Roll90Yaw135,20:Roll270,21:Roll270Yaw45,22:Roll270Yaw90,23:Roll270Yaw135,24:Pitch90,25:Pitch270,26:Pitch180Yaw90,27:Pitch180Yaw270,28:Roll90Pitch90,29:Roll180Pitch90,30:Roll270Pitch90,31:Roll90Pitch180,32:Roll270Pitch180,33:Roll90Pitch270,34:Roll180Pitch270,35:Roll270Pitch270,36:Roll90Pitch180Yaw90,37:Roll90Yaw270,38:Yaw293Pitch68Roll180,39:Pitch315,40:Roll90Pitch315,100:Custom
+    // @Values: 0:None,1:Yaw45,2:Yaw90,3:Yaw135,4:Yaw180,5:Yaw225,6:Yaw270,7:Yaw315,8:Roll180,9:Roll180Yaw45,10:Roll180Yaw90,11:Roll180Yaw135,12:Pitch180,13:Roll180Yaw225,14:Roll180Yaw270,15:Roll180Yaw315,16:Roll90,17:Roll90Yaw45,18:Roll90Yaw90,19:Roll90Yaw135,20:Roll270,21:Roll270Yaw45,22:Roll270Yaw90,23:Roll270Yaw135,24:Pitch90,25:Pitch270,26:Pitch180Yaw90,27:Pitch180Yaw270,28:Roll90Pitch90,29:Roll180Pitch90,30:Roll270Pitch90,31:Roll90Pitch180,32:Roll270Pitch180,33:Roll90Pitch270,34:Roll180Pitch270,35:Roll270Pitch270,36:Roll90Pitch180Yaw90,37:Roll90Yaw270,38:Yaw293Pitch68Roll180,39:Pitch315,40:Roll90Pitch315,42:Roll45,43:Roll315,100:Custom
     // @User: Advanced
     AP_GROUPINFO("ORIENTATION", 9, AP_AHRS, _board_orientation, 0),
 
@@ -191,6 +191,11 @@ AP_AHRS::AP_AHRS(uint8_t flags) :
     _ekf_flags |= AP_AHRS::FLAG_ALWAYS_USE_EKF;
 #endif
     _dcm_matrix.identity();
+
+    // initialise the controller-to-autopilot-body trim state:
+    _last_trim = _trim.get();
+    _rotation_autopilot_body_to_vehicle_body.from_euler(_last_trim.x, _last_trim.y, 0.0f);
+    _rotation_vehicle_body_to_autopilot_body = _rotation_autopilot_body_to_vehicle_body.transposed();
 }
 
 // init sets up INS board orientation
@@ -216,6 +221,24 @@ void AP_AHRS::init()
 
     // init parent class
     AP_AHRS_DCM::init();
+
+#if HAL_NMEA_OUTPUT_ENABLED
+    _nmea_out = AP_NMEA_Output::probe();
+#endif
+}
+
+// updates matrices responsible for rotating vectors from vehicle body
+// frame to autopilot body frame from _trim variables
+void AP_AHRS::update_trim_rotation_matrices()
+{
+    if (_last_trim == _trim.get()) {
+        // nothing to do
+        return;
+    }
+
+    _last_trim = _trim.get();
+    _rotation_autopilot_body_to_vehicle_body.from_euler(_last_trim.x, _last_trim.y, 0.0f);
+    _rotation_vehicle_body_to_autopilot_body = _rotation_autopilot_body_to_vehicle_body.transposed();
 }
 
 // return the smoothed gyro vector corrected for drift
@@ -266,12 +289,24 @@ void AP_AHRS::update(bool skip_ins_update)
 {
     // support locked access functions to AHRS data
     WITH_SEMAPHORE(_rsem);
-    
+
+    // see if we have to restore home after a watchdog reset:
+    if (!_checked_watchdog_home) {
+        load_watchdog_home();
+        _checked_watchdog_home = true;
+    }
+
     // drop back to normal priority if we were boosted by the INS
     // calling delay_microseconds_boost()
     hal.scheduler->boost_end();
 
+    // update autopilot-body-to-vehicle-body from _trim parameters:
+    update_trim_rotation_matrices();
+
     update_DCM(skip_ins_update);
+
+    // update takeoff/touchdown flags
+    update_flags();
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     update_SITL();
@@ -316,9 +351,14 @@ void AP_AHRS::update(bool skip_ins_update)
         _view->update(skip_ins_update);
     }
 
-#if !HAL_MINIMIZE_FEATURES
+    // update AOA and SSA
+    update_AOA_SSA();
+
+#if HAL_NMEA_OUTPUT_ENABLED
     // update NMEA output
-    update_nmea_out();
+    if (_nmea_out != nullptr) {
+        _nmea_out->update();
+    }
 #endif
 
     EKFType active = active_EKF_type();
@@ -330,7 +370,7 @@ void AP_AHRS::update(bool skip_ins_update)
             shortname = "DCM";
             break;
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-        case EKFType::SITL:
+        case EKFType::SIM:
             shortname = "SITL";
             break;
 #endif
@@ -417,7 +457,6 @@ void AP_AHRS::update_EKF2(void)
             _gyro_drift = -_gyro_drift;
 
             // calculate corrected gyro estimate for get_gyro()
-            _gyro_estimate.zero();
             if (primary_imu == -1 || !_ins.get_gyro_health(primary_imu)) {
                 // the primary IMU is undefined so use an uncorrected default value from the INS library
                 _gyro_estimate = _ins.get_gyro();
@@ -497,7 +536,6 @@ void AP_AHRS::update_EKF3(void)
             _gyro_drift = -_gyro_drift;
 
             // calculate corrected gyro estimate for get_gyro()
-            _gyro_estimate.zero();
             if (primary_imu == -1 || !_ins.get_gyro_health(primary_imu)) {
                 // the primary IMU is undefined so use an uncorrected default value from the INS library
                 _gyro_estimate = _ins.get_gyro();
@@ -546,7 +584,7 @@ void AP_AHRS::update_SITL(void)
     const struct SITL::sitl_fdm &fdm = _sitl->state;
     const AP_InertialSensor &_ins = AP::ins();
 
-    if (active_EKF_type() == EKFType::SITL) {
+    if (active_EKF_type() == EKFType::SIM) {
 
         fdm.quaternion.rotation_matrix(_dcm_matrix);
         _dcm_matrix = _dcm_matrix * get_rotation_vehicle_body_to_autopilot_body();
@@ -645,9 +683,10 @@ void AP_AHRS::reset(bool recover_eulers)
 {
     // support locked access functions to AHRS data
     WITH_SEMAPHORE(_rsem);
-    
+
     AP_AHRS_DCM::reset(recover_eulers);
     _dcm_attitude = {roll, pitch, yaw};
+
 #if HAL_NAVEKF2_AVAILABLE
     if (_ekf2_started) {
         _ekf2_started = EKF2.InitialiseFilter();
@@ -684,7 +723,7 @@ bool AP_AHRS::get_position(struct Location &loc) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL: {
+    case EKFType::SIM: {
         if (_sitl) {
             const struct SITL::sitl_fdm &fdm = _sitl->state;
             loc = {};
@@ -732,7 +771,7 @@ Vector3f AP_AHRS::wind_estimate(void) const
         break;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         wind.zero();
         break;
 #endif
@@ -782,12 +821,16 @@ bool AP_AHRS::airspeed_estimate(float &airspeed_ret) const
         return AP_AHRS_DCM::airspeed_estimate(get_active_airspeed_index(), airspeed_ret);
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
+#if HAL_NAVEKF3_AVAILABLE
         if (EKF3.getWind(-1,wind_vel)) {
              ret = true;
         } else {
             ret = false;
         }
+#else
+        ret = false;
+#endif
         break;
 #endif
 
@@ -849,7 +892,7 @@ bool AP_AHRS::airspeed_vector_true(Vector3f &vec) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         break;
 #endif
 
@@ -878,7 +921,7 @@ bool AP_AHRS::use_compass(void)
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return true;
 #endif
 
@@ -894,36 +937,50 @@ bool AP_AHRS::use_compass(void)
 // return the quaternion defining the rotation from NED to XYZ (body) axes
 bool AP_AHRS::get_quaternion(Quaternion &quat) const
 {
+    // backends always return in autopilot XYZ frame; rotate result
+    // according to trim
     switch (active_EKF_type()) {
     case EKFType::NONE:
-        return AP_AHRS_DCM::get_quaternion(quat);
+        if (!AP_AHRS_DCM::get_quaternion(quat)) {
+            return false;
+        }
+        break;
 #if HAL_NAVEKF2_AVAILABLE
     case EKFType::TWO:
+        if (!_ekf2_started) {
+            return false;
+        }
         EKF2.getQuaternion(-1, quat);
-        return _ekf2_started;
+        break;
 #endif
 #if HAL_NAVEKF3_AVAILABLE
     case EKFType::THREE:
-        EKF3.getQuaternion(-1, quat);
-        return _ekf3_started;
-#endif
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
-        if (_sitl) {
-            const struct SITL::sitl_fdm &fdm = _sitl->state;
-            quat = fdm.quaternion;
-            return true;
-        } else {
+        if (!_ekf3_started) {
             return false;
         }
+        EKF3.getQuaternion(-1, quat);
+        break;
+#endif
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    case EKFType::SIM: {
+        if (!_sitl) {
+            return false;
+        }
+        const struct SITL::sitl_fdm &fdm = _sitl->state;
+        quat = fdm.quaternion;
+        break;
+    }
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
     case EKFType::EXTERNAL:
+        // we assume the external AHRS isn't trimmed with the autopilot!
         return AP::externalAHRS().get_quaternion(quat);
 #endif
     }
-    // since there is no default case above, this is unreachable
-    return false;
+
+    quat.rotate(-_trim.get());
+
+    return true;
 }
 
 // return secondary attitude solution if available, as eulers in radians
@@ -956,7 +1013,7 @@ bool AP_AHRS::get_secondary_attitude(Vector3f &eulers) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         // SITL is secondary (should never happen)
         return false;
 #endif
@@ -991,25 +1048,33 @@ bool AP_AHRS::get_secondary_quaternion(Quaternion &quat) const
 
     case EKFType::NONE:
         // DCM is secondary
-        quat.from_rotation_matrix(AP_AHRS_DCM::get_rotation_body_to_ned());
-        return true;
+        if (!AP_AHRS_DCM::get_quaternion(quat)) {
+            return false;
+        }
+        break;
 
 #if HAL_NAVEKF2_AVAILABLE
     case EKFType::TWO:
         // EKF2 is secondary
+        if (!_ekf2_started) {
+            return false;
+        }
         EKF2.getQuaternion(-1, quat);
-        return _ekf2_started;
+        break;
 #endif
 
 #if HAL_NAVEKF3_AVAILABLE
     case EKFType::THREE:
         // EKF3 is secondary
+        if (!_ekf3_started) {
+            return false;
+        }
         EKF3.getQuaternion(-1, quat);
-        return _ekf3_started;
+        break;
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         // SITL is secondary (should never happen)
         return false;
 #endif
@@ -1021,8 +1086,9 @@ bool AP_AHRS::get_secondary_quaternion(Quaternion &quat) const
 #endif
     }
 
-    // since there is no default case above, this is unreachable
-    return false;
+    quat.rotate(-_trim.get());
+
+    return true;
 }
 
 // return secondary position solution if available
@@ -1055,7 +1121,7 @@ bool AP_AHRS::get_secondary_position(struct Location &loc) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         // SITL is secondary (should never happen)
         return false;
 #endif
@@ -1093,7 +1159,7 @@ Vector2f AP_AHRS::groundspeed_vector(void)
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL: {
+    case EKFType::SIM: {
         if (_sitl) {
             const struct SITL::sitl_fdm &fdm = _sitl->state;
             return Vector2f(fdm.speedN, fdm.speedE);
@@ -1139,7 +1205,7 @@ bool AP_AHRS::set_origin(const Location &loc)
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         // never allow origin set in SITL. The origin is set by the
         // simulation backend
         return false;
@@ -1181,7 +1247,7 @@ bool AP_AHRS::get_velocity_NED(Vector3f &vec) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL: {
+    case EKFType::SIM: {
         if (!_sitl) {
             return false;
         }
@@ -1218,7 +1284,7 @@ bool AP_AHRS::get_mag_field_NED(Vector3f &vec) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return false;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -1249,7 +1315,7 @@ bool AP_AHRS::get_mag_field_correction(Vector3f &vec) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return false;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -1282,7 +1348,7 @@ bool AP_AHRS::get_vert_pos_rate(float &velocity) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         if (_sitl) {
             const struct SITL::sitl_fdm &fdm = _sitl->state;
             velocity = fdm.speedD;
@@ -1318,7 +1384,7 @@ bool AP_AHRS::get_hagl(float &height) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL: {
+    case EKFType::SIM: {
         if (!_sitl) {
             return false;
         }
@@ -1376,7 +1442,7 @@ bool AP_AHRS::get_relative_position_NED_origin(Vector3f &vec) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL: {
+    case EKFType::SIM: {
         if (!_sitl) {
             return false;
         }
@@ -1453,7 +1519,7 @@ bool AP_AHRS::get_relative_position_NE_origin(Vector2f &posNE) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL: {
+    case EKFType::SIM: {
         Location loc, orgn;
         if (!get_position(loc) ||
             !get_origin(orgn)) {
@@ -1523,7 +1589,7 @@ bool AP_AHRS::get_relative_position_D_origin(float &posD) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL: {
+    case EKFType::SIM: {
         if (!_sitl) {
             return false;
         }
@@ -1576,7 +1642,7 @@ AP_AHRS::EKFType AP_AHRS::ekf_type(void) const
     EKFType type = (EKFType)_ekf_type.get();
     switch (type) {
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return type;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -1660,8 +1726,8 @@ AP_AHRS::EKFType AP_AHRS::active_EKF_type(void) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
-        ret = EKFType::SITL;
+    case EKFType::SIM:
+        ret = EKFType::SIM;
         break;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -1680,9 +1746,9 @@ AP_AHRS::EKFType AP_AHRS::active_EKF_type(void) const
       wing and rover
      */
     if (ret != EKFType::NONE &&
-        (_vehicle_class == AHRS_VEHICLE_FIXED_WING ||
-         _vehicle_class == AHRS_VEHICLE_GROUND) &&
-        (_flags.fly_forward || !hal.util->get_soft_armed())) {
+        (_vehicle_class == VehicleClass::FIXED_WING ||
+         _vehicle_class == VehicleClass::GROUND) &&
+        (fly_forward || !hal.util->get_soft_armed())) {
         bool should_use_gps = true;
         nav_filter_status filt_state;
 #if HAL_NAVEKF2_AVAILABLE
@@ -1698,7 +1764,7 @@ AP_AHRS::EKFType AP_AHRS::active_EKF_type(void) const
         }
 #endif
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-        if (ret == EKFType::SITL) {
+        if (ret == EKFType::SIM) {
             get_filter_status(filt_state);
         }
 #endif
@@ -1730,7 +1796,7 @@ AP_AHRS::EKFType AP_AHRS::active_EKF_type(void) const
         }
         if (!filt_state.flags.horiz_vel ||
             (!filt_state.flags.horiz_pos_abs && !filt_state.flags.horiz_pos_rel)) {
-            if ((!_compass || !_compass->use_for_yaw()) &&
+            if ((!AP::compass().use_for_yaw()) &&
                 AP::gps().status() >= AP_GPS::GPS_OK_FIX_3D &&
                 AP::gps().ground_speed() < 2) {
                 /*
@@ -1783,7 +1849,7 @@ bool AP_AHRS::get_secondary_EKF_type(EKFType &secondary_ekf_type) const
     case EKFType::THREE:
 #endif
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
     case EKFType::EXTERNAL:
@@ -1815,8 +1881,8 @@ bool AP_AHRS::healthy(void) const
         if (!ret) {
             return false;
         }
-        if ((_vehicle_class == AHRS_VEHICLE_FIXED_WING ||
-                _vehicle_class == AHRS_VEHICLE_GROUND) &&
+        if ((_vehicle_class == VehicleClass::FIXED_WING ||
+                _vehicle_class == VehicleClass::GROUND) &&
                 active_EKF_type() != EKFType::TWO) {
             // on fixed wing we want to be using EKF to be considered
             // healthy if EKF is enabled
@@ -1832,8 +1898,8 @@ bool AP_AHRS::healthy(void) const
         if (!ret) {
             return false;
         }
-        if ((_vehicle_class == AHRS_VEHICLE_FIXED_WING ||
-                _vehicle_class == AHRS_VEHICLE_GROUND) &&
+        if ((_vehicle_class == VehicleClass::FIXED_WING ||
+                _vehicle_class == VehicleClass::GROUND) &&
                 active_EKF_type() != EKFType::THREE) {
             // on fixed wing we want to be using EKF to be considered
             // healthy if EKF is enabled
@@ -1844,7 +1910,7 @@ bool AP_AHRS::healthy(void) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return true;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -1870,7 +1936,7 @@ bool AP_AHRS::pre_arm_check(bool requires_position, char *failure_msg, uint8_t f
 
     switch (ekf_type()) {
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
 #endif
     case EKFType::NONE:
         return ret;
@@ -1924,7 +1990,7 @@ bool AP_AHRS::initialised(void) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return true;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -1955,7 +2021,7 @@ bool AP_AHRS::get_filter_status(nav_filter_status &status) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         memset(&status, 0, sizeof(status));
         status.flags.attitude = 1;
         status.flags.horiz_vel = 1;
@@ -2050,7 +2116,7 @@ void AP_AHRS::getEkfControlLimits(float &ekfGndSpdLimit, float &ekfNavVelGainSca
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         // same as EKF2 for no optical flow
         ekfGndSpdLimit = 400.0f;
         ekfNavVelGainScaler = 1.0f;
@@ -2083,7 +2149,7 @@ bool AP_AHRS::getMagOffsets(uint8_t mag_idx, Vector3f &magOffsets) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         magOffsets.zero();
         return true;
 #endif
@@ -2117,7 +2183,7 @@ void AP_AHRS::getCorrectedDeltaVelocityNED(Vector3f& ret, float& dt) const
         break;
 #endif
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         break;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -2143,7 +2209,7 @@ bool AP_AHRS::attitudes_consistent(char *failure_msg, const uint8_t failure_msg_
     Quaternion primary_quat;
     get_quat_body_to_ned(primary_quat);
     // only check yaw if compasses are being used
-    bool check_yaw = _compass && _compass->use_for_yaw();
+    const bool check_yaw = AP::compass().use_for_yaw();
     uint8_t total_ekf_cores = 0;
 
 #if HAL_NAVEKF2_AVAILABLE
@@ -2248,7 +2314,7 @@ uint32_t AP_AHRS::getLastYawResetAngle(float &yawAng)
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return 0;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -2279,7 +2345,7 @@ uint32_t AP_AHRS::getLastPosNorthEastReset(Vector2f &pos)
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return 0;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -2310,7 +2376,7 @@ uint32_t AP_AHRS::getLastVelNorthEastReset(Vector2f &vel) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return 0;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -2341,7 +2407,7 @@ uint32_t AP_AHRS::getLastPosDownReset(float &posDelta)
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return 0;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -2390,7 +2456,7 @@ bool AP_AHRS::resetHeightDatum(void)
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return false;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -2411,7 +2477,7 @@ void AP_AHRS::send_ekf_status_report(mavlink_channel_t chan) const
         break;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         {
         // send status report with everything looking good
         const uint16_t flags =
@@ -2476,7 +2542,7 @@ bool AP_AHRS::get_origin(Location &ret) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL: {
+    case EKFType::SIM: {
         if (!_sitl) {
             return false;
         }
@@ -2515,7 +2581,7 @@ bool AP_AHRS::get_hgt_ctrl_limit(float& limit) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return false;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -2577,7 +2643,7 @@ bool AP_AHRS::get_location(struct Location &loc) const
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         return get_position(loc);
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -2611,7 +2677,7 @@ bool AP_AHRS::get_innovations(Vector3f &velInnov, Vector3f &posInnov, Vector3f &
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         velInnov.zero();
         posInnov.zero();
         magInnov.zero();
@@ -2642,7 +2708,7 @@ bool AP_AHRS::is_vibration_affected() const
     case EKFType::TWO:
 #endif
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
     case EKFType::EXTERNAL:
@@ -2680,7 +2746,7 @@ bool AP_AHRS::get_variances(float &velVar, float &posVar, float &hgtVar, Vector3
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         velVar = 0;
         posVar = 0;
         hgtVar = 0;
@@ -2720,7 +2786,7 @@ bool AP_AHRS::get_vel_innovations_and_variances_for_source(uint8_t source, Vecto
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         // SITL does not support source level variances
         return false;
 #endif
@@ -2780,7 +2846,7 @@ uint8_t AP_AHRS::get_primary_IMU_index() const
         break;
 #endif
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         break;
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -2806,7 +2872,7 @@ int8_t AP_AHRS::get_primary_core_index() const
     switch (active_EKF_type()) {
     case EKFType::NONE:
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
     case EKFType::EXTERNAL:
@@ -2856,7 +2922,7 @@ void AP_AHRS::check_lane_switch(void)
         break;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         break;
 #endif
 
@@ -2887,7 +2953,7 @@ void AP_AHRS::request_yaw_reset(void)
         break;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
         break;
 #endif
 
@@ -2942,7 +3008,7 @@ bool AP_AHRS::is_ext_nav_used_for_yaw(void) const
         return EKF3.using_external_yaw();
 #endif
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    case EKFType::SITL:
+    case EKFType::SIM:
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
     case EKFType::EXTERNAL:
