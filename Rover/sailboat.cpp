@@ -172,17 +172,19 @@ void Sailboat::init_rc_in()
     if (rc_ptr != nullptr) {
         // use aux as sail differential input if defined
         channel_differential = rc_ptr;
-        channel_differential->set_angle(0);
+        channel_differential->set_angle(100);
         channel_differential->set_default_dead_zone(30);
     } else {
         // use lateral channel
+	hal.console->printf("Using lateral channel for sail differential\n");
         channel_differential = rover.channel_lateral;
     }
     // get foresail flap limit
     rc_ptr = rc().find_channel_for_option(RC_Channel::AUX_FUNC::FLAP_LIM_FWD);
     if (rc_ptr != nullptr) {
+	hal.console->printf("Setting fore flap channel\n");
         channel_fore_flap = rc_ptr;
-        channel_fore_flap->set_angle(0);
+        channel_fore_flap->set_range(100);
         channel_fore_flap->set_default_dead_zone(30);
     } else {
         channel_fore_flap = nullptr;
@@ -190,8 +192,9 @@ void Sailboat::init_rc_in()
     // get mizzen flap limit
     rc_ptr = rc().find_channel_for_option(RC_Channel::AUX_FUNC::FLAP_LIM_MIZZ);
     if (rc_ptr != nullptr) {
+	hal.console->printf("Setting mizzen flap channel\n");
         channel_mizz_flap = rc_ptr;
-        channel_mizz_flap->set_angle(0);
+        channel_mizz_flap->set_range(100);
         channel_mizz_flap->set_default_dead_zone(30);
     } else {
         channel_mizz_flap = nullptr;
@@ -212,6 +215,7 @@ void Sailboat::get_pilot_desired_mainsail(
     float &mizz_flap_lim_out
 )
 {
+	hal.console->printf("Manual sailboat mode engaged\n");
     // no RC input means mainsail is moved to trim
     if ((rover.failsafe.bits & FAILSAFE_EVENT_THROTTLE) || (channel_mainsail == nullptr)) {
         mainsail_out = 100.0f;
@@ -240,7 +244,7 @@ void Sailboat::get_pilot_desired_mainsail(
 // returns true if successful, false if sailboats not enabled
 void Sailboat::get_throttle_and_mainsail_out(float desired_speed, float &throttle_out, float &mainsail_out, float &wingsail_out, float &mast_rotation_out)
 {
-    hal.console->printf("Kilroy wuz here!\n");
+    hal.console->printf("Sailboat Point of Sail Control Engaged\n");
     if (!sail_enabled()) {
         throttle_out = 0.0f;
         mainsail_out = 0.0f;
