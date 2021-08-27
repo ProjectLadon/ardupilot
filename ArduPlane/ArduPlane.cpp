@@ -102,7 +102,9 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
     SCHED_TASK(avoidance_adsb_update,  10,    100),
 #endif
     SCHED_TASK_CLASS(RC_Channels,       (RC_Channels*)&plane.g2.rc_channels, read_aux_all,           10,    200),
+#if HAL_BUTTON_ENABLED
     SCHED_TASK_CLASS(AP_Button, &plane.button, update, 5, 100),
+#endif
 #if STATS_ENABLED == ENABLED
     SCHED_TASK_CLASS(AP_Stats, &plane.g2.stats, update, 1, 100),
 #endif
@@ -430,7 +432,10 @@ void Plane::update_control_mode(void)
     // ensure we are fly-forward when we are flying as a pure fixed
     // wing aircraft. This helps the EKF produce better state
     // estimates as it can make stronger assumptions
-    if (quadplane.in_vtol_mode() ||
+    if (quadplane.available() &&
+        quadplane.tailsitter.is_in_fw_flight()) {
+        ahrs.set_fly_forward(true);
+    } else if (quadplane.in_vtol_mode() ||
         quadplane.in_assisted_flight()) {
         ahrs.set_fly_forward(false);
     } else if (flight_stage == AP_Vehicle::FixedWing::FLIGHT_LAND) {

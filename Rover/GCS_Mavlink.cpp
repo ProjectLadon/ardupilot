@@ -117,10 +117,10 @@ void GCS_MAVLINK_Rover::send_nav_controller_output() const
         control_mode->crosstrack_error());
 }
 
-void Rover::send_servo_out(mavlink_channel_t chan)
+void GCS_MAVLINK_Rover::send_servo_out()
 {
     float motor1, motor3;
-    if (g2.motors.have_skid_steering()) {
+    if (rover.g2.motors.have_skid_steering()) {
         motor1 = 10000 * (SRV_Channels::get_output_scaled(SRV_Channel::k_throttleLeft) / 1000.0f);
         motor3 = 10000 * (SRV_Channels::get_output_scaled(SRV_Channel::k_throttleRight) / 1000.0f);
     } else {
@@ -139,7 +139,7 @@ void Rover::send_servo_out(mavlink_channel_t chan)
         0,
         0,
         0,
-        rssi.read_receiver_rssi_uint8());
+        receiver_rssi());
 }
 
 int16_t GCS_MAVLINK_Rover::vfr_hud_throttle() const
@@ -196,7 +196,9 @@ void GCS_MAVLINK_Rover::send_pid_tuning()
                                     pid_info->FF,
                                     pid_info->P,
                                     pid_info->I,
-                                    pid_info->D);
+                                    pid_info->D,
+                                    pid_info->slew_rate,
+                                    pid_info->Dmod);
         if (!HAVE_PAYLOAD_SPACE(chan, PID_TUNING)) {
             return;
         }
@@ -211,7 +213,9 @@ void GCS_MAVLINK_Rover::send_pid_tuning()
                                     pid_info->FF,
                                     pid_info->P,
                                     pid_info->I,
-                                    pid_info->D);
+                                    pid_info->D,
+                                    pid_info->slew_rate,
+                                    pid_info->Dmod);
         if (!HAVE_PAYLOAD_SPACE(chan, PID_TUNING)) {
             return;
         }
@@ -226,7 +230,9 @@ void GCS_MAVLINK_Rover::send_pid_tuning()
                                     pid_info->FF,
                                     pid_info->P,
                                     pid_info->I,
-                                    pid_info->D);
+                                    pid_info->D,
+                                    pid_info->slew_rate,
+                                    pid_info->Dmod);
         if (!HAVE_PAYLOAD_SPACE(chan, PID_TUNING)) {
             return;
         }
@@ -241,7 +247,9 @@ void GCS_MAVLINK_Rover::send_pid_tuning()
                                     pid_info->FF,
                                     pid_info->P,
                                     pid_info->I,
-                                    pid_info->D);
+                                    pid_info->D,
+                                    pid_info->slew_rate,
+                                    pid_info->Dmod);
         if (!HAVE_PAYLOAD_SPACE(chan, PID_TUNING)) {
             return;
         }
@@ -256,7 +264,9 @@ void GCS_MAVLINK_Rover::send_pid_tuning()
                                     pid_info->FF,
                                     pid_info->P,
                                     pid_info->I,
-                                    pid_info->D);
+                                    pid_info->D,
+                                    pid_info->slew_rate,
+                                    pid_info->Dmod);
         if (!HAVE_PAYLOAD_SPACE(chan, PID_TUNING)) {
             return;
         }
@@ -271,7 +281,9 @@ void GCS_MAVLINK_Rover::send_pid_tuning()
                                     pid_info->FF,
                                     pid_info->P,
                                     pid_info->I,
-                                    pid_info->D);
+                                    pid_info->D,
+                                    pid_info->slew_rate,
+                                    pid_info->Dmod);
         if (!HAVE_PAYLOAD_SPACE(chan, PID_TUNING)) {
             return;
         }
@@ -317,7 +329,7 @@ bool GCS_MAVLINK_Rover::try_send_message(enum ap_message id)
 
     case MSG_SERVO_OUT:
         CHECK_PAYLOAD_SIZE(RC_CHANNELS_SCALED);
-        rover.send_servo_out(chan);
+        send_servo_out();
         break;
 
     case MSG_WHEEL_DISTANCE:
@@ -466,11 +478,11 @@ static const ap_message STREAM_RAW_SENSORS_msgs[] = {
     MSG_SCALED_PRESSURE,
     MSG_SCALED_PRESSURE2,
     MSG_SCALED_PRESSURE3,
-    MSG_SENSOR_OFFSETS
 };
 static const ap_message STREAM_EXTENDED_STATUS_msgs[] = {
     MSG_SYS_STATUS,
     MSG_POWER_STATUS,
+    MSG_MCU_STATUS,
     MSG_MEMINFO,
     MSG_CURRENT_WAYPOINT,
     MSG_GPS_RAW,

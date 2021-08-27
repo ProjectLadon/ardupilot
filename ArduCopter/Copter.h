@@ -113,6 +113,7 @@
 #endif
 #if PRECISION_LANDING == ENABLED
  # include <AC_PrecLand/AC_PrecLand.h>
+ # include <AC_PrecLand/AC_PrecLand_StateMachine.h>
 #endif
 #if MODE_FOLLOW_ENABLED == ENABLED
  # include <AP_Follow/AP_Follow.h>
@@ -135,7 +136,7 @@
 #if CAMERA == ENABLED
  # include <AP_Camera/AP_Camera.h>
 #endif
-#if BUTTON_ENABLED == ENABLED
+#if HAL_BUTTON_ENABLED
  # include <AP_Button/AP_Button.h>
 #endif
 
@@ -523,6 +524,7 @@ private:
     // Precision Landing
 #if PRECISION_LANDING == ENABLED
     AC_PrecLand precland;
+    AC_PrecLand_StateMachine precland_statemachine;
 #endif
 
     // Pilot Input Management Library
@@ -646,9 +648,14 @@ private:
 #ifdef ENABLE_SCRIPTING
     bool start_takeoff(float alt) override;
     bool set_target_location(const Location& target_loc) override;
+    bool set_target_pos_NED(const Vector3f& target_pos, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool yaw_relative, bool terrain_alt) override;
     bool set_target_posvel_NED(const Vector3f& target_pos, const Vector3f& target_vel) override;
+    bool set_target_posvelaccel_NED(const Vector3f& target_pos, const Vector3f& target_vel, const Vector3f& target_accel, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool yaw_relative) override;
     bool set_target_velocity_NED(const Vector3f& vel_ned) override;
+    bool set_target_velaccel_NED(const Vector3f& target_vel, const Vector3f& target_accel, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool relative_yaw) override;
     bool set_target_angle_and_climbrate(float roll_deg, float pitch_deg, float yaw_deg, float climb_rate_ms, bool use_yaw_rate, float yaw_rate_degs) override;
+    bool get_circle_radius(float &radius_m) override;
+    bool set_circle_rate(float rate_dps) override;
 #endif // ENABLE_SCRIPTING
     void rc_loop();
     void throttle_loop();
@@ -862,7 +869,6 @@ private:
     bool rangefinder_up_ok() const;
     void rpm_update();
     void update_optical_flow(void);
-    void compass_cal_update(void);
     void accel_cal_update(void);
     void init_proximity();
     void update_proximity();
