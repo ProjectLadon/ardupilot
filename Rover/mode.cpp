@@ -189,11 +189,13 @@ void Mode::get_pilot_desired_roll_and_pitch(float &roll_out, float &pitch_out)
     if (channel_roll != nullptr) {
         roll_out = channel_roll->norm_input();
     } else {
+	hal.console->printf("Sin channel not available\n");
         roll_out = 0.0f;
     }
     if (channel_pitch != nullptr) {
         pitch_out = channel_pitch->norm_input();
     } else {
+	hal.console->printf("Cos channel not available\n");
         pitch_out = 0.0f;
     }
 }
@@ -308,7 +310,8 @@ void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
         float mainsail_out = 0.0f;
         float wingsail_out = 0.0f;
         float mast_rotation_out = 0.0f;
-        rover.g2.sailboat.get_throttle_and_mainsail_out(target_speed, throttle_out, mainsail_out, wingsail_out, mast_rotation_out);
+	float diff, fore_flap, mizz_flap;
+        rover.g2.sailboat.get_throttle_and_mainsail_out(target_speed, throttle_out, mainsail_out, wingsail_out, mast_rotation_out, diff, fore_flap, mizz_flap);
         rover.g2.motors.set_mainsail(mainsail_out);
         rover.g2.motors.set_wingsail(wingsail_out);
         rover.g2.motors.set_mast_rotation(mast_rotation_out);

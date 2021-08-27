@@ -4,6 +4,8 @@
 void ModeAcro::update()
 {
     // get speed forward
+    hal.console->printf("Executing acro mode\n");
+    hal.console->printf("===========================\n");
     float speed, desired_steering;
     if (!attitude_control.get_forward_speed(speed)) {
         float desired_throttle;
@@ -11,11 +13,13 @@ void ModeAcro::update()
         get_pilot_desired_steering_and_throttle(desired_steering, desired_throttle);
         // no valid speed, just use the provided throttle
         g2.motors.set_throttle(desired_throttle);
+	hal.console->printf("Executing with throttle %6.2f\t", desired_throttle);
     } else {
         float desired_speed;
         // convert pilot stick input into desired steering and speed
         get_pilot_desired_steering_and_speed(desired_steering, desired_speed);
         calc_throttle(desired_speed, true);
+	hal.console->printf("Executing with speed %6.2f\t", desired_speed);
     }
 
     float steering_out;
@@ -30,6 +34,8 @@ void ModeAcro::update()
         g2.motors.limit.steer_right,
         rover.G_Dt
     );
+    float desired_mainsail, dw, dmr, dd, desired_fore_flap, desired_mizzen_flap;
+    g2.sailboat.get_pilot_desired_mainsail(desired_mainsail, dw, dmr, dd, desired_fore_flap, desired_mizzen_flap);
 
     // handle sailboats
     // if (!is_zero(desired_steering)) {
@@ -55,8 +61,14 @@ void ModeAcro::update()
     //                                                           rover.G_Dt);
     // }
 
-    set_steering(steering_out * 4500.0f);
+    hal.console->printf("Sin: %6.2f\tCos: %6.2f\t", sin_in, cos_in);
+    hal.console->printf("Steering Out: %6.2f\t", steering_out);
+    hal.console->printf("\n===========================\n");
+    g2.motors.set_steering(steering_out * 4500.0f);
     g2.motors.set_sail_differential(steering_out * 100.0f);
+    g2.motors.set_mainsail(desired_mainsail);
+    g2.motors.set_foresail_flap_limit(desired_fore_flap);
+    g2.motors.set_mizzen_flap_limit(desired_mizzen_flap);
 }
 
 bool ModeAcro::requires_velocity() const

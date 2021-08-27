@@ -52,7 +52,16 @@ public:
     );
 
     // calculate throttle and mainsail angle required to attain desired speed (in m/s)
-    void get_throttle_and_mainsail_out(float desired_speed, float &throttle_out, float &mainsail_out, float &wingsail_out, float &mast_rotation_out);
+    void get_throttle_and_mainsail_out(
+        float desired_speed, 
+	float &throttle_out, 
+	float &mainsail_out, 
+	float &wingsail_out, 
+	float &mast_rotation_out,
+	float &differential_out,
+	float &fore_flap_out,
+	float &mizz_flap_out
+    );
 
     // Velocity Made Good, this is the speed we are traveling towards the desired destination
     float get_VMG() const;

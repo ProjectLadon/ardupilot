@@ -242,7 +242,16 @@ void Sailboat::get_pilot_desired_mainsail(
 
 // calculate throttle and mainsail angle required to attain desired speed (in m/s)
 // returns true if successful, false if sailboats not enabled
-void Sailboat::get_throttle_and_mainsail_out(float desired_speed, float &throttle_out, float &mainsail_out, float &wingsail_out, float &mast_rotation_out)
+void Sailboat::get_throttle_and_mainsail_out(
+    float desired_speed,
+    float &throttle_out,
+    float &mainsail_out,
+    float &wingsail_out,
+    float &mast_rotation_out,
+    float &differential_out,
+    float &fore_flap_lim_out,
+    float &mizz_flap_lim_out
+)
 {
     hal.console->printf("Sailboat Point of Sail Control Engaged\n");
     if (!sail_enabled()) {
@@ -250,6 +259,9 @@ void Sailboat::get_throttle_and_mainsail_out(float desired_speed, float &throttl
         mainsail_out = 0.0f;
         wingsail_out = 0.0f;
         mast_rotation_out = 0.0f;
+        differential_out = 0.0f;
+        fore_flap_lim_out = 0.0f;
+        mizz_flap_lim_out = 0.0f;
         return;
     }
 
