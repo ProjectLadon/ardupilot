@@ -215,7 +215,7 @@ void Sailboat::get_pilot_desired_mainsail(
     float &mizz_flap_lim_out
 )
 {
-	hal.console->printf("Manual sailboat mode engaged\n");
+	//hal.console->printf("Manual sailboat mode engaged\n");
     // no RC input means mainsail is moved to trim
     if ((rover.failsafe.bits & FAILSAFE_EVENT_THROTTLE) || (channel_mainsail == nullptr)) {
         mainsail_out = 100.0f;
@@ -597,7 +597,12 @@ float Sailboat::calc_point_of_sail_heading_rad(float cos_in, float sin_in)
     {
         wind_angle_rad = atan2f(sin_in, cos_in);
     }
-    return wrap_2PI(true_wind_rad - wind_angle_rad);
+    float result = wrap_2PI(true_wind_rad - wind_angle_rad);
+    hal.console->printf("Wind (deg): %6.2f\t", true_wind_rad*180/M_PI); 
+    hal.console->printf("Target POS (deg): %6.2f\t", (float)wind_angle_rad*180/M_PI); 
+    hal.console->printf("Norming: %6.2f\t", norm_factor); 
+    hal.console->printf("Target course (deg):%6.2f\n", result*180/M_PI);
+    return result;
 }
 
 // set state of motor

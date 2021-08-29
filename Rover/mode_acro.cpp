@@ -26,7 +26,7 @@ void ModeAcro::update()
 
     // handle Ladon Robotics sailboats
     float cos_in, sin_in;
-    get_pilot_desired_roll_and_pitch(cos_in, sin_in);
+    get_pilot_desired_roll_and_pitch(sin_in, cos_in);
     steering_out = attitude_control.get_steering_out_heading(
         rover.g2.sailboat.calc_point_of_sail_heading_rad(cos_in, sin_in),
         g2.wp_nav.get_pivot_rate(),
