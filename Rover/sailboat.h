@@ -43,6 +43,8 @@ public:
     // fore_flap_lim_out is in the range 0 to 100, defaults to 0
     // mizz_flap_lim_out is in the range 0 to 100, defaults to 0
     void get_pilot_desired_mainsail(
+        float throttle,
+        float steering,
         float &mainsail_out,
         float &wingsail_out,
         float &mast_rotation_out,
@@ -53,14 +55,24 @@ public:
 
     // calculate throttle and mainsail angle required to attain desired speed (in m/s)
     void get_throttle_and_mainsail_out(
-        float desired_speed, 
-	float &throttle_out, 
-	float &mainsail_out, 
-	float &wingsail_out, 
-	float &mast_rotation_out,
-	float &differential_out,
-	float &fore_flap_out,
-	float &mizz_flap_out
+        float desired_speed,
+        float steering,
+        float &throttle_out,
+        float &mainsail_out,
+        float &wingsail_out,
+        float &mast_rotation_out,
+        float &differential_out,
+        float &fore_flap_out,
+        float &mizz_flap_out
+    );
+
+    void get_differential(float steering, float &differential_out);
+
+    // calculate steering output for a given point of sail in radians
+    void get_point_of_sail_steering(
+        float point_of_sail,
+        float &steering_out,
+        AR_AttitudeControl &attitude_control
     );
 
     // Velocity Made Good, this is the speed we are traveling towards the desired destination
@@ -125,6 +137,7 @@ private:
     AP_Float sail_windspeed_min;
     AP_Float xtrack_max;
     AP_Float loit_radius;
+    AP_Float diff_steer_mult;
     AP_Float wind_angle_rad;
 
     RC_Channel *channel_mainsail;   // rc input channel for controlling mainsail

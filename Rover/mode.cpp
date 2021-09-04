@@ -289,11 +289,14 @@ void Mode::handle_tack_request()
 void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
 {
     // get acceleration limited target speed
-    target_speed = attitude_control.get_desired_speed_accel_limited(target_speed, rover.G_Dt);
+    target_speed = attitude_control.get_desired_speed_accel_limited(
+        target_speed, rover.G_Dt);
 
     // apply object avoidance to desired speed using half vehicle's maximum deceleration
     if (avoidance_enabled) {
-        g2.avoid.adjust_speed(0.0f, 0.5f * attitude_control.get_decel_max(), ahrs.yaw, target_speed, rover.G_Dt);
+        g2.avoid.adjust_speed(
+            0.0f, 0.5f * attitude_control.get_decel_max(),
+            ahrs.yaw, target_speed, rover.G_Dt);
         if (g2.sailboat.tack_enabled() && g2.avoid.limits_active()) {
             // we are a sailboat trying to avoid fence, try a tack
             if (rover.control_mode != &rover.mode_acro) {
@@ -310,11 +313,24 @@ void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
         float mainsail_out = 0.0f;
         float wingsail_out = 0.0f;
         float mast_rotation_out = 0.0f;
-	float diff, fore_flap, mizz_flap;
-        rover.g2.sailboat.get_throttle_and_mainsail_out(target_speed, throttle_out, mainsail_out, wingsail_out, mast_rotation_out, diff, fore_flap, mizz_flap);
+        float diff_out = 0.0f;
+        float fore_flap = 0.0f;
+        float mizz_flap = 0.0f;
+        rover.g2.sailboat.get_throttle_and_mainsail_out(
+            target_speed, 0.0f,
+            throttle_out,
+            mainsail_out,
+            wingsail_out,
+            mast_rotation_out,
+            diff_out,
+            fore_flap,
+            mizz_flap
+        );
         rover.g2.motors.set_mainsail(mainsail_out);
         rover.g2.motors.set_wingsail(wingsail_out);
         rover.g2.motors.set_mast_rotation(mast_rotation_out);
+        rover.g2.motors.set_foresail_flap_limit(fore_flap);
+        rover.g2.motors.set_mizzen_flap_limit(mizz_flap);
     } else {
         // call speed or stop controller
         if (is_zero(target_speed) && !rover.is_balancebot()) {
@@ -346,7 +362,13 @@ bool Mode::stop_vehicle()
         throttle_out = 100.0f * attitude_control.get_throttle_out_speed(0, g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt);
         rover.balancebot_pitch_control(throttle_out);
     } else {
-        throttle_out = 100.0f * attitude_control.get_throttle_out_stop(g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, stopped);
+        throttle_out = 100.0f * attitude_control.get_throttle_out_stop(
+            g2.motors.limit.throttle_lower,
+            g2.motors.limit.throttle_upper,
+            g.speed_cruise,
+            g.throttle_cruise * 0.01f,
+            rover.G_Dt,
+            stopped);
     }
 
     // relax sails if present
@@ -454,26 +476,37 @@ void Mode::navigate_to_waypoint()
 void Mode::calc_steering_from_turn_rate(float turn_rate)
 {
     // calculate and send final steering command to motor library
-    const float steering_out = attitude_control.get_steering_out_rate(turn_rate,
-                                                                      g2.motors.limit.steer_left,
-                                                                      g2.motors.limit.steer_right,
-                                                                      rover.G_Dt);
+    const float steering_out =
+        attitude_control.get_steering_out_rate(
+            turn_rate,
+            g2.motors.limit.steer_left,
+            g2.motors.limit.steer_right,
+            rover.G_Dt
+        );
+    float diff_out;
     g2.motors.set_steering(steering_out * 4500.0f);
+    g2.sailboat.get_differential(steering_out, diff_out);
+    g2.motors.set_sail_differential(diff_out);
 }
 
 /*
     calculate steering output given lateral_acceleration
 */
-void Mode::calc_steering_from_lateral_acceleration(float lat_accel, bool reversed)
+void Mode::calc_steering_from_lateral_acceleration(
+    float lat_accel,
+    bool reversed
+)
 {
     // constrain to max G force
     lat_accel = constrain_float(lat_accel, -attitude_control.get_turn_lat_accel_max(), attitude_control.get_turn_lat_accel_max());
 
     // send final steering command to motor library
-    const float steering_out = attitude_control.get_steering_out_lat_accel(lat_accel,
-                                                                           g2.motors.limit.steer_left,
-                                                                           g2.motors.limit.steer_right,
-                                                                           rover.G_Dt);
+    const float steering_out =
+        attitude_control.get_steering_out_lat_accel(
+            lat_accel,
+            g2.motors.limit.steer_left,
+            g2.motors.limit.steer_right,
+            rover.G_Dt);
     set_steering(steering_out * 4500.0f);
 }
 
@@ -482,11 +515,13 @@ void Mode::calc_steering_from_lateral_acceleration(float lat_accel, bool reverse
 void Mode::calc_steering_to_heading(float desired_heading_cd, float rate_max_degs)
 {
     // call heading controller
-    const float steering_out = attitude_control.get_steering_out_heading(radians(desired_heading_cd*0.01f),
-                                                                         radians(rate_max_degs),
-                                                                         g2.motors.limit.steer_left,
-                                                                         g2.motors.limit.steer_right,
-                                                                         rover.G_Dt);
+    const float steering_out =
+        attitude_control.get_steering_out_heading(
+            radians(desired_heading_cd*0.01f),
+            radians(rate_max_degs),
+            g2.motors.limit.steer_left,
+            g2.motors.limit.steer_right,
+            rover.G_Dt);
     set_steering(steering_out * 4500.0f);
 }
 
@@ -497,6 +532,9 @@ void Mode::set_steering(float steering_value)
     }
     steering_value = constrain_float(steering_value, -4500.0f, 4500.0f);
     g2.motors.set_steering(steering_value);
+    float diff_out;
+    g2.sailboat.get_differential(steering_value, diff_out);
+    g2.motors.set_sail_differential(diff_out);
 }
 
 Mode *Rover::mode_from_mode_num(const enum Mode::Number num)

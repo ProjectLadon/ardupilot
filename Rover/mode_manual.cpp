@@ -34,6 +34,7 @@ void ModeManual::update()
     float desired_fore_flap;
     float desired_mizzen_flap;
     g2.sailboat.get_pilot_desired_mainsail(
+        desired_throttle, desired_steering,
         desired_mainsail, desired_wingsail, desired_mast_rotation,
         desired_differential, desired_fore_flap, desired_mizzen_flap
     );

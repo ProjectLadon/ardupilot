@@ -102,6 +102,15 @@ const AP_Param::GroupInfo Sailboat::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("LOIT_RADIUS", 9, Sailboat, loit_radius, 5),
 
+    // @Param: DIFF_STEER_MULT
+    // @DisplayName: Differential steering gain
+    // @Description: This controls how much the steering
+    // @Units: unitless
+    // @Range: 0 1000
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("DIFF_STEER_MULT", 10, Sailboat, diff_steer_mult, 100),
+
     AP_GROUPEND
 };
 
@@ -204,9 +213,26 @@ void Sailboat::init_rc_in()
     channel_cos = rover.channel_roll;
 }
 
+void Sailboat::get_point_of_sail_steering(
+    float point_of_sail,
+    float &steering_out,
+    AR_AttitudeControl &attitude_control
+)
+{
+    steering_out = attitude_control.get_steering_out_heading(
+        point_of_sail,
+        rover.g2.wp_nav.get_pivot_rate(),
+        rover.g2.motors.limit.steer_left,
+        rover.g2.motors.limit.steer_right,
+        rover.G_Dt
+    );
+}
+
 // decode pilot mainsail input and return in steer_out and throttle_out arguments
 // mainsail_out is in the range 0 to 100, defaults to 100 (fully relaxed) if no input configured
 void Sailboat::get_pilot_desired_mainsail(
+    float throttle,
+    float steering,
     float &mainsail_out,
     float &wingsail_out,
     float &mast_rotation_out,
@@ -226,12 +252,10 @@ void Sailboat::get_pilot_desired_mainsail(
         mizz_flap_lim_out = 0.0f;
         return;
     }
-    mainsail_out = constrain_float(channel_mainsail->get_control_in(), 0.0f, 100.0f);
-    wingsail_out = constrain_float(channel_mainsail->get_control_in(), -100.0f, 100.0f);
-    mast_rotation_out = constrain_float(channel_mainsail->get_control_in(), -100.0f, 100.0f);
-    if (channel_differential != nullptr) {
-        differential_out = constrain_float(channel_differential->get_control_in(), -100.0f, 100.0f);
-    } else differential_out = 0.0f;
+    mainsail_out = constrain_float(throttle, 0.0f, 100.0f);
+    wingsail_out = constrain_float(throttle, -100.0f, 100.0f);
+    mast_rotation_out = constrain_float(throttle, -100.0f, 100.0f);
+    differential_out = constrain_float(steering * diff_steer_mult, -100.0f, 100.0f);
     if (channel_fore_flap != nullptr) {
         fore_flap_lim_out = constrain_float(channel_fore_flap->get_control_in(), 0.0f, 100.0f);
     } else fore_flap_lim_out = 0.0f;
@@ -244,6 +268,7 @@ void Sailboat::get_pilot_desired_mainsail(
 // returns true if successful, false if sailboats not enabled
 void Sailboat::get_throttle_and_mainsail_out(
     float desired_speed,
+    float steering,
     float &throttle_out,
     float &mainsail_out,
     float &wingsail_out,
@@ -253,7 +278,6 @@ void Sailboat::get_throttle_and_mainsail_out(
     float &mizz_flap_lim_out
 )
 {
-    hal.console->printf("Sailboat Point of Sail Control Engaged\n");
     if (!sail_enabled()) {
         throttle_out = 0.0f;
         mainsail_out = 0.0f;
@@ -265,18 +289,25 @@ void Sailboat::get_throttle_and_mainsail_out(
         return;
     }
 
+    differential_out = constrain_float(steering * diff_steer_mult, -100.0f, 100.0f);
+
     // run speed controller if motor is forced on or motor assistance is required for low speeds or tacking
     if ((motor_state == UseMotor::USE_MOTOR_ALWAYS) ||
          motor_assist_tack() ||
-         motor_assist_low_wind()) {
+         motor_assist_low_wind())
+    {
         // run speed controller - duplicate of calls found in mode::calc_throttle();
-        throttle_out = 100.0f * rover.g2.attitude_control.get_throttle_out_speed(desired_speed,
-                                                                        rover.g2.motors.limit.throttle_lower,
-                                                                        rover.g2.motors.limit.throttle_upper,
-                                                                        rover.g.speed_cruise,
-                                                                        rover.g.throttle_cruise * 0.01f,
-                                                                        rover.G_Dt);
-    } else {
+        throttle_out =
+            100.0f * rover.g2.attitude_control.get_throttle_out_speed(
+                desired_speed,
+                rover.g2.motors.limit.throttle_lower,
+                rover.g2.motors.limit.throttle_upper,
+                rover.g.speed_cruise,
+                rover.g.throttle_cruise * 0.01f,
+                rover.G_Dt);
+    }
+    else
+    {
         throttle_out = 0.0f;
     }
 
@@ -289,10 +320,13 @@ void Sailboat::get_throttle_and_mainsail_out(
     }
 
     // use PID controller to sheet out, this number is expected approximately in the 0 to 100 range (with default PIDs)
-    const float pid_offset = rover.g2.attitude_control.get_sail_out_from_heel(radians(sail_heel_angle_max), rover.G_Dt) * 100.0f;
+    const float pid_offset =
+        rover.g2.attitude_control.get_sail_out_from_heel(
+            radians(sail_heel_angle_max), rover.G_Dt) * 100.0f;
 
     // get apparent wind, + is wind over starboard side, - is wind over port side
-    const float wind_dir_apparent = degrees(rover.g2.windvane.get_apparent_wind_direction_rad());
+    const float wind_dir_apparent =
+        degrees(rover.g2.windvane.get_apparent_wind_direction_rad());
     const float wind_dir_apparent_abs = fabsf(wind_dir_apparent);
     const float wind_dir_apparent_sign = is_negative(wind_dir_apparent) ? -1.0f : 1.0f;
 
@@ -310,12 +344,14 @@ void Sailboat::get_throttle_and_mainsail_out(
         float mainsail_angle = wind_dir_apparent_abs - sail_angle_ideal;
 
         // make sure between allowable range
-        mainsail_angle = constrain_float(mainsail_angle,sail_angle_min, sail_angle_max);
+        mainsail_angle = constrain_float(mainsail_angle, sail_angle_min, sail_angle_max);
 
         // linear interpolate mainsail value (0 to 100) from wind angle mainsail_angle
         float mainsail_base = linear_interpolate(0.0f, 100.0f, mainsail_angle,sail_angle_min,sail_angle_max);
 
         mainsail_out = constrain_float((mainsail_base + pid_offset), 0.0f ,100.0f);
+        fore_flap_lim_out = mainsail_out;
+        mizz_flap_lim_out = mainsail_out;
     }
 
     //
@@ -376,6 +412,10 @@ void Sailboat::get_throttle_and_mainsail_out(
         }
     }
 
+}
+
+void Sailboat::get_differential(float steering, float &differential_out) {
+    differential_out = constrain_float(steering * diff_steer_mult, -100.0f, 100.0f);
 }
 
 // Velocity Made Good, this is the speed we are traveling towards the desired destination
@@ -598,9 +638,9 @@ float Sailboat::calc_point_of_sail_heading_rad(float cos_in, float sin_in)
         wind_angle_rad = atan2f(sin_in, cos_in);
     }
     float result = wrap_2PI(true_wind_rad - wind_angle_rad);
-    hal.console->printf("Wind (deg): %6.2f\t", true_wind_rad*180/M_PI); 
-    hal.console->printf("Target POS (deg): %6.2f\t", (float)wind_angle_rad*180/M_PI); 
-    hal.console->printf("Norming: %6.2f\t", norm_factor); 
+    hal.console->printf("Wind (deg): %6.2f\t", true_wind_rad*180/M_PI);
+    hal.console->printf("Target POS (deg): %6.2f\t", (float)wind_angle_rad*180/M_PI);
+    hal.console->printf("Norming: %6.2f\t", norm_factor);
     hal.console->printf("Target course (deg):%6.2f\n", result*180/M_PI);
     return result;
 }
