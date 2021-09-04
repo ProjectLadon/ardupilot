@@ -90,7 +90,7 @@ public:
     //  should be called if gyro offsets are recalculated
     void reset_gyro_drift() override;
 
-    void            update(bool skip_ins_update=false) override;
+    void            update(bool skip_ins_update=false);
     void            reset(bool recover_eulers = false) override;
 
     // dead-reckoning support
@@ -270,12 +270,6 @@ public:
     // this is not related to terrain following
     void set_terrain_hgt_stable(bool stable) override;
 
-    // get_location - updates the provided location with the latest
-    // calculated location including absolute altitude
-    // returns true on success (i.e. the EKF knows it's latest
-    // position), false on failure
-    bool get_location(struct Location &loc) const;
-
     // return the innovations for the specified instance
     // An out of range instance (eg -1) returns data for the primary instance
     bool get_innovations(Vector3f &velInnov, Vector3f &posInnov, Vector3f &magInnov, float &tasInnov, float &yawInnov) const override;
@@ -298,8 +292,6 @@ public:
 
     // returns the estimated magnetic field offsets in body frame
     bool get_mag_field_correction(Vector3f &ret) const override;
-
-    bool getGpsGlitchStatus() const;
 
     // return the index of the airspeed we should use for airspeed measurements
     // with multiple airspeed sensors and airspeed affinity in EKF3, it is possible to have switched
@@ -328,8 +320,11 @@ public:
 
     void Log_Write();
 
-    // check whether external navigation is providing yaw.  Allows compass pre-arm checks to be bypassed
-    bool is_ext_nav_used_for_yaw(void) const override;
+    // check if non-compass sensor is providing yaw.  Allows compass pre-arm checks to be bypassed
+    bool using_noncompass_for_yaw(void) const override;
+
+    // check if external nav is providing yaw
+    bool using_extnav_for_yaw(void) const override;
 
     // set and save the ALT_M_NSE parameter value
     void set_alt_measurement_noise(float noise) override;
@@ -537,7 +532,7 @@ private:
     uint8_t _ekf_flags; // bitmask from Flags enumeration
 
     EKFType ekf_type(void) const;
-    void update_DCM(bool skip_ins_update);
+    void update_DCM();
 
     // get the index of the current primary IMU
     uint8_t get_primary_IMU_index(void) const;
@@ -619,6 +614,9 @@ private:
      * use to provide additional and/or improved estimates.
      */
     bool fly_forward; // true if we can assume the vehicle will be flying forward on its X axis
+
+    // poke AP_Notify based on values from status
+    void update_notify_from_filter_status(const nav_filter_status &status);
 
 #if HAL_NMEA_OUTPUT_ENABLED
     class AP_NMEA_Output* _nmea_out;

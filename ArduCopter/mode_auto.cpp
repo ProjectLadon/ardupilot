@@ -166,7 +166,8 @@ bool ModeAuto::jump_to_landing_sequence_auto_RTL(ModeReason reason)
 {
     if (mission.jump_to_landing_sequence()) {
         mission.set_force_resume(true);
-        if (set_mode(Mode::Number::AUTO, reason)) {
+        // if not already in auto switch to auto
+        if ((copter.flightmode == &copter.mode_auto) || set_mode(Mode::Number::AUTO, reason)) {
             auto_RTL = true;
             return true;
         }
@@ -889,12 +890,8 @@ void ModeAuto::land_run()
     // set motors to full range
     motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-#if PRECISION_LANDING == ENABLED
-        // the state machine takes care of the entire landing procedure
-        run_precland();
-#else
-        run_land_controllers();
-#endif
+    // run normal landing or precision landing (if enabled)
+    land_run_normal_or_precland();
 }
 
 // auto_rtl_run - rtl in AUTO flight mode
