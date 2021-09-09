@@ -17,7 +17,7 @@
 #include <AP_Baro/AP_Baro.h>
 #include <AP_Airspeed/AP_Airspeed.h>
 #include <AP_BattMonitor/AP_BattMonitor.h>
-#include <AP_BLHeli/AP_BLHeli.h>
+#include <AP_ESC_Telem/AP_ESC_Telem.h>
 #include <RC_Channel/RC_Channel.h>
 #include <AP_Common/AP_FWVersion.h>
 #include <AP_GPS/AP_GPS.h>
@@ -65,7 +65,7 @@ void AP_MSP_Telem_Backend::setup_wfq_scheduler(void)
     set_scheduler_entry(ALTITUDE, 250, 250);          // 4Hz  altitude(cm) and velocity(cm/s)
     set_scheduler_entry(ANALOG, 250, 250);            // 4Hz  rssi + batt
     set_scheduler_entry(BATTERY_STATE, 500, 500);     // 2Hz  battery
-#ifdef HAVE_AP_BLHELI_SUPPORT
+#if HAL_WITH_ESC_TELEM
     set_scheduler_entry(ESC_SENSOR_DATA, 500, 500);   // 2Hz  ESC telemetry
 #endif
     set_scheduler_entry(RTC_DATETIME, 1000, 1000);    // 1Hz  RTC
@@ -113,7 +113,7 @@ bool AP_MSP_Telem_Backend::is_packet_ready(uint8_t idx, bool queue_empty)
     case ALTITUDE:          // Altitude and Vario
     case ANALOG:            // Rssi, Battery, mAh, Current
     case BATTERY_STATE:     // voltage, capacity, current, mAh
-#ifdef HAVE_AP_BLHELI_SUPPORT
+#if HAL_WITH_ESC_TELEM
     case ESC_SENSOR_DATA:   // esc temp + rpm
 #endif
     case RTC_DATETIME:      // RTC
@@ -358,6 +358,25 @@ void AP_MSP_Telem_Backend::process_incoming_data()
 }
 
 /*
+  send an MSP packet
+ */
+void AP_MSP_Telem_Backend::msp_send_packet(uint16_t cmd, MSP::msp_version_e msp_version, const void *p, uint16_t size, bool is_request)
+{
+    uint8_t out_buf[MSP_PORT_OUTBUF_SIZE];
+
+    msp_packet_t pkt = {
+        .buf = { .ptr = out_buf, .end = MSP_ARRAYEND(out_buf), },
+        .cmd = (int16_t)cmd,
+        .flags = 0,
+        .result = 0,
+    };
+
+    sbuf_write_data(&pkt.buf, p, size);
+    sbuf_switch_to_reader(&pkt.buf, &out_buf[0]);
+    msp_serial_encode(&_msp_port, &pkt, msp_version, is_request);
+}
+
+/*
   ported from betaflight/src/main/msp/msp_serial.c
  */
 void AP_MSP_Telem_Backend::msp_process_received_command()
@@ -450,7 +469,7 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_command(uint16_t cmd_msp,
         return msp_process_out_battery_state(dst);
     case MSP_UID:
         return msp_process_out_uid(dst);
-#ifdef HAVE_AP_BLHELI_SUPPORT
+#if HAL_WITH_ESC_TELEM
     case MSP_ESC_SENSOR_DATA:
         return msp_process_out_esc_sensor_data(dst);
 #endif
@@ -820,7 +839,7 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_altitude(sbuf_t *dst)
     update_home_pos(home_state);
 
     sbuf_write_u32(dst, home_state.rel_altitude_cm);                // relative altitude cm
-    sbuf_write_u16(dst, (int16_t)get_vspeed_ms() * 100);            // climb rate cm/s
+    sbuf_write_u16(dst, int16_t(get_vspeed_ms() * 100));            // climb rate cm/s
     return MSP_RESULT_ACK;
 }
 
@@ -884,16 +903,18 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_battery_state(sbuf_t *dst
 
 MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_esc_sensor_data(sbuf_t *dst)
 {
-#ifdef HAVE_AP_BLHELI_SUPPORT
-    AP_BLHeli *blheli = AP_BLHeli::get_singleton();
-    if (blheli && blheli->have_telem_data()) {
-        const uint8_t num_motors = blheli->get_num_motors();
+#if HAL_WITH_ESC_TELEM
+    AP_ESC_Telem& telem = AP::esc_telem();
+    if (telem.get_last_telem_data_ms(0)) {
+        const uint8_t num_motors = telem.get_num_active_escs();
         sbuf_write_u8(dst, num_motors);
         for (uint8_t i = 0; i < num_motors; i++) {
-            AP_BLHeli::telem_data td {};
-            blheli->get_telem_data(i, td);
-            sbuf_write_u8(dst, td.temperature);        // deg
-            sbuf_write_u16(dst, td.rpm / 100);
+            int16_t temp = 0;
+            float rpm = 0.0f;
+            telem.get_rpm(i, rpm);
+            telem.get_temperature(i, temp);
+            sbuf_write_u8(dst, uint8_t(temp / 100));        // deg
+            sbuf_write_u16(dst, uint16_t(rpm * 0.1));
         }
     }
 #endif
@@ -945,12 +966,12 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_rc(sbuf_t *dst)
         uint16_t r;
         uint16_t t;
     } rc;
-
     // send only 4 channels, MSP order is AERT
-    rc.a = values[rcmap->roll()];       // A
-    rc.e = values[rcmap->pitch()];      // E
-    rc.r = values[rcmap->yaw()];        // R
-    rc.t = values[rcmap->throttle()];   // T
+    // note: rcmap channels start at 1
+    rc.a = values[rcmap->roll()-1];       // A
+    rc.e = values[rcmap->pitch()-1];      // E
+    rc.r = values[rcmap->yaw()-1];        // R
+    rc.t = values[rcmap->throttle()-1];   // T
 
     sbuf_write_data(dst, &rc, sizeof(rc));
     return MSP_RESULT_ACK;
@@ -1057,4 +1078,67 @@ void AP_MSP_Telem_Backend::hide_osd_items(void)
     }
 }
 
+#if HAL_WITH_MSP_DISPLAYPORT
+// ported from betaflight/src/main/io/displayport_msp.c
+void AP_MSP_Telem_Backend::msp_displayport_heartbeat()
+{
+    const uint8_t subcmd[] = { msp_displayport_subcmd_e::MSP_DISPLAYPORT_HEARTBEAT };
+
+    // heartbeat is used to:
+    // a) ensure display is not released by remote OSD software
+    // b) prevent OSD Slave boards from displaying a 'disconnected' status.
+    msp_send_packet(MSP_DISPLAYPORT, MSP::MSP_V1, subcmd, sizeof(subcmd), false);
+}
+
+void AP_MSP_Telem_Backend::msp_displayport_grab()
+{
+    msp_displayport_heartbeat();
+}
+
+void AP_MSP_Telem_Backend::msp_displayport_release()
+{
+    const uint8_t subcmd[] = { msp_displayport_subcmd_e::MSP_DISPLAYPORT_RELEASE };
+
+    msp_send_packet(MSP_DISPLAYPORT, MSP::MSP_V1, subcmd, sizeof(subcmd), false);
+}
+
+void AP_MSP_Telem_Backend::msp_displayport_clear_screen()
+{
+    const uint8_t subcmd[] = { msp_displayport_subcmd_e::MSP_DISPLAYPORT_CLEAR_SCREEN };
+
+    msp_send_packet(MSP_DISPLAYPORT, MSP::MSP_V1, subcmd, sizeof(subcmd), false);
+}
+
+void AP_MSP_Telem_Backend::msp_displayport_draw_screen()
+{
+    const uint8_t subcmd[] = { msp_displayport_subcmd_e::MSP_DISPLAYPORT_DRAW_SCREEN };
+    msp_send_packet(MSP_DISPLAYPORT, MSP::MSP_V1, subcmd, sizeof(subcmd), false);
+}
+
+void AP_MSP_Telem_Backend::msp_displayport_write_string(uint8_t col, uint8_t row, bool blink, const char *string)
+{
+    int len = strlen(string);
+    if (len >= OSD_MSP_DISPLAYPORT_MAX_STRING_LENGTH) {
+        len = OSD_MSP_DISPLAYPORT_MAX_STRING_LENGTH;
+    }
+
+    struct PACKED {
+        uint8_t sub_cmd;
+        uint8_t row;
+        uint8_t col;
+        uint8_t attr;
+        uint8_t text[OSD_MSP_DISPLAYPORT_MAX_STRING_LENGTH];
+    } packet {};
+
+    packet.sub_cmd = msp_displayport_subcmd_e::MSP_DISPLAYPORT_WRITE_STRING;
+    packet.row = row;
+    packet.col = col;
+    if (blink) {
+        packet.attr |= DISPLAYPORT_MSP_ATTR_BLINK;
+    }
+    memcpy(packet.text, string, len);
+
+    msp_send_packet(MSP_DISPLAYPORT, MSP::MSP_V1, &packet, 4 + len, false);
+}
+#endif //HAL_WITH_MSP_DISPLAYPORT
 #endif //HAL_MSP_ENABLED

@@ -15,6 +15,9 @@
 
 
 #include "AP_Button.h"
+
+#if HAL_BUTTON_ENABLED
+
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #include <GCS_MAVLink/GCS.h>
 
@@ -201,9 +204,18 @@ void AP_Button::update(void)
             }
         }
     }
+    const uint64_t now_ms = AP_HAL::millis64();
     if (new_pwm_state != pwm_state) {
-        pwm_state = new_pwm_state;
-        last_debounce_ms = AP_HAL::millis64();
+        if (new_pwm_state != tentative_pwm_state) {
+            tentative_pwm_state = new_pwm_state;
+            pwm_start_debounce_ms = now_ms;
+        } else if (now_ms - pwm_start_debounce_ms > DEBOUNCE_MS) {
+            pwm_state = new_pwm_state;
+            last_debounce_ms = now_ms;
+        }
+    } else {
+        tentative_pwm_state = pwm_state;
+        pwm_start_debounce_ms = now_ms;
     }
 
     if (last_debounce_ms != 0 &&
@@ -270,7 +282,7 @@ void AP_Button::run_aux_functions(bool force)
             gcs().send_text(MAV_SEVERITY_INFO, "Button: executing (%s)", str);
         }
 #endif
-        rc_channel->do_aux_function(func, pos);
+        rc_channel->run_aux_function(func, pos, RC_Channel::AuxFuncTriggerSource::BUTTON);
     }
 }
 
@@ -368,6 +380,21 @@ void AP_Button::setup_pins(void)
     }
 }
 
+// check settings are valid
+bool AP_Button::arming_checks(size_t buflen, char *buffer) const
+{
+    if (!enable) {
+        return true;
+    }
+    for (uint8_t i=0; i<AP_BUTTON_NUM_PINS; i++) {
+        if (pin[i] != -1 && !hal.gpio->valid_pin(pin[i])) {
+            hal.util->snprintf(buffer, buflen, "BTN_PIN%u %d invalid", unsigned(i + 1), int(pin[i].get()));
+            return false;
+        }
+    }
+    return true;
+}
+
 namespace AP {
 
 AP_Button &button()
@@ -376,3 +403,5 @@ AP_Button &button()
 }
 
 }
+
+#endif

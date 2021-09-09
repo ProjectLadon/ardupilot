@@ -53,6 +53,7 @@ static void _sig_fpe(int signum)
 {
     fprintf(stderr, "ERROR: Floating point exception - aborting\n");
     AP_HAL::dump_stack_trace();
+    AP_HAL::dump_core_file();
     abort();
 }
 
@@ -61,6 +62,7 @@ static void _sig_segv(int signum)
 {
     fprintf(stderr, "ERROR: segmentation fault - aborting\n");
     AP_HAL::dump_stack_trace();
+    AP_HAL::dump_core_file();
     abort();
 }
 
@@ -93,6 +95,15 @@ void SITL_State::_usage(void)
            "\t--uartG device           set device string for UARTG\n"
            "\t--uartH device           set device string for UARTH\n"
            "\t--uartI device           set device string for UARTI\n"
+           "\t--serial0 device         set device string for SERIAL0\n"
+           "\t--serial1 device         set device string for SERIAL1\n"
+           "\t--serial2 device         set device string for SERIAL2\n"
+           "\t--serial3 device         set device string for SERIAL3\n"
+           "\t--serial4 device         set device string for SERIAL4\n"
+           "\t--serial5 device         set device string for SERIAL5\n"
+           "\t--serial6 device         set device string for SERIAL6\n"
+           "\t--serial7 device         set device string for SERIAL7\n"
+           "\t--serial8 device         set device string for SERIAL8\n"
            "\t--rtscts                 enable rtscts on serial ports (default false)\n"
            "\t--base-port PORT         set port num for base port(default 5670) must be before -I option\n"
            "\t--rc-in-port PORT        set port num for rc in\n"
@@ -102,6 +113,7 @@ void SITL_State::_usage(void)
            "\t--irlock-port PORT       set port num for irlock\n"
            "\t--start-time TIMESTR     set simulation start time in UNIX timestamp\n"
            "\t--sysid ID               set SYSID_THISMAV\n"
+           "\t--slave number           set the number of JSON slaves\n"
         );
 }
 
@@ -135,6 +147,7 @@ static const struct {
     { "heli",               Helicopter::create },
     { "heli-dual",          Helicopter::create },
     { "heli-compound",      Helicopter::create },
+    { "heli-blade360",         Helicopter::create },
     { "singlecopter",       SingleCopter::create },
     { "coaxcopter",         SingleCopter::create },
     { "rover",              SimRover::create },
@@ -231,6 +244,15 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
         CMDLINE_UARTG,
         CMDLINE_UARTH,
         CMDLINE_UARTI,
+        CMDLINE_SERIAL0,
+        CMDLINE_SERIAL1,
+        CMDLINE_SERIAL2,
+        CMDLINE_SERIAL3,
+        CMDLINE_SERIAL4,
+        CMDLINE_SERIAL5,
+        CMDLINE_SERIAL6,
+        CMDLINE_SERIAL7,
+        CMDLINE_SERIAL8,
         CMDLINE_RTSCTS,
         CMDLINE_BASE_PORT,
         CMDLINE_RCIN_PORT,
@@ -240,6 +262,7 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
         CMDLINE_IRLOCK_PORT,
         CMDLINE_START_TIME,
         CMDLINE_SYSID,
+        CMDLINE_SLAVE,
     };
 
     const struct GetOptLong::option options[] = {
@@ -269,6 +292,15 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
         {"uartG",           true,   0, CMDLINE_UARTG},
         {"uartH",           true,   0, CMDLINE_UARTH},
         {"uartI",           true,   0, CMDLINE_UARTI},
+        {"serial0",         true,   0, CMDLINE_SERIAL0},
+        {"serial1",         true,   0, CMDLINE_SERIAL1},
+        {"serial2",         true,   0, CMDLINE_SERIAL2},
+        {"serial3",         true,   0, CMDLINE_SERIAL3},
+        {"serial4",         true,   0, CMDLINE_SERIAL4},
+        {"serial5",         true,   0, CMDLINE_SERIAL5},
+        {"serial6",         true,   0, CMDLINE_SERIAL6},
+        {"serial7",         true,   0, CMDLINE_SERIAL7},
+        {"serial8",         true,   0, CMDLINE_SERIAL8},
         {"rtscts",          false,  0, CMDLINE_RTSCTS},
         {"base-port",       true,   0, CMDLINE_BASE_PORT},
         {"rc-in-port",      true,   0, CMDLINE_RCIN_PORT},
@@ -278,6 +310,7 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
         {"irlock-port",     true,   0, CMDLINE_IRLOCK_PORT},
         {"start-time",      true,   0, CMDLINE_START_TIME},
         {"sysid",           true,   0, CMDLINE_SYSID},
+        {"slave",           true,   0, CMDLINE_SLAVE},
         {0, false, 0, 0}
     };
 
@@ -381,7 +414,19 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
         case CMDLINE_UARTF:
         case CMDLINE_UARTG:
         case CMDLINE_UARTH:
+        case CMDLINE_UARTI:
             _uart_path[opt - CMDLINE_UARTA] = gopt.optarg;
+            break;
+        case CMDLINE_SERIAL0:
+        case CMDLINE_SERIAL1:
+        case CMDLINE_SERIAL2:
+        case CMDLINE_SERIAL3:
+        case CMDLINE_SERIAL4:
+        case CMDLINE_SERIAL5:
+        case CMDLINE_SERIAL6:
+        case CMDLINE_SERIAL7:
+        case CMDLINE_SERIAL8:
+            _uart_path[opt - CMDLINE_SERIAL0] = gopt.optarg;
             break;
         case CMDLINE_RTSCTS:
             _use_rtscts = true;
@@ -416,6 +461,16 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
             temp_cmdline_param = {"SYSID_THISMAV", static_cast<float>(sysid)};
             cmdline_param.push_back(temp_cmdline_param);
             printf("Setting SYSID_THISMAV=%d\n", sysid);
+            break;
+        }
+        case 'h':
+            _usage();
+            exit(0);
+        case CMDLINE_SLAVE: {
+            const int32_t slaves = atoi(gopt.optarg);
+            if (slaves > 0) {
+                ride_along.init(slaves);
+            }
             break;
         }
         default:

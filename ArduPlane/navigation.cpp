@@ -1,20 +1,5 @@
 #include "Plane.h"
 
-// set the nav_controller pointer to the right controller
-void Plane::set_nav_controller(void)
-{
-    switch ((AP_Navigation::ControllerType)g.nav_controller.get()) {
-
-    default:
-    case AP_Navigation::CONTROLLER_DEFAULT:
-        // no break, fall through to L1 as default controller
-
-    case AP_Navigation::CONTROLLER_L1:
-        nav_controller = &L1_controller;
-        break;
-    }
-}
-
 /*
   reset the total loiter angle
  */
@@ -100,9 +85,6 @@ void Plane::loiter_angle_update(void)
 //****************************************************************
 void Plane::navigate()
 {
-    // allow change of nav controller mid-flight
-    set_nav_controller();
-
     // do not navigate with corrupt data
     // ---------------------------------
     if (!have_position) {
@@ -199,6 +181,8 @@ void Plane::calc_airspeed_errors()
                          // fallover to normal airspeed
                          target_airspeed_cm = aparm.airspeed_cruise_cm;
                      }
+        } else if (quadplane.in_vtol_land_approach()) {
+            target_airspeed_cm = quadplane.get_land_airspeed() * 100;
         } else {
             // normal AUTO mode and new_airspeed variable was set by DO_CHANGE_SPEED command while in AUTO mode
             if (new_airspeed_cm > 0) {
@@ -208,6 +192,8 @@ void Plane::calc_airspeed_errors()
                 target_airspeed_cm = aparm.airspeed_cruise_cm;
             }
         }
+    } else if (control_mode == &mode_qrtl && quadplane.in_vtol_land_approach()) {
+        target_airspeed_cm = quadplane.get_land_airspeed() * 100;
     } else {
         // Normal airspeed target for all other cases
         target_airspeed_cm = aparm.airspeed_cruise_cm;

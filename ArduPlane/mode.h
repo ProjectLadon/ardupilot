@@ -7,7 +7,11 @@
 #include <AP_Soaring/AP_Soaring.h>
 #include <AP_ADSB/AP_ADSB.h>
 #include <AP_Vehicle/ModeReason.h>
+#include "quadplane.h"
 
+class AC_PosControl;
+class AC_AttitudeControl_Multi;
+class AC_Loiter;
 class Mode
 {
 public:
@@ -53,6 +57,9 @@ public:
 
     // perform any cleanups required:
     void exit();
+
+    // run controllers specific to this mode
+    virtual void run() {};
 
     // returns a unique number specific to this mode
     virtual Number mode_number() const = 0;
@@ -101,6 +108,9 @@ public:
     // whether control input is ignored with STICK_MIXING=0
     virtual bool does_auto_throttle() const { return false; }
 
+    // method for mode specific target altitude profiles
+    virtual bool update_target_altitude() { return false; }
+    
 protected:
 
     // subclasses override this to perform checks before entering the mode
@@ -108,6 +118,14 @@ protected:
 
     // subclasses override this to perform any required cleanup when exiting the mode
     virtual void _exit() { return; }
+
+    // References for convenience, used by QModes
+    QuadPlane& quadplane;
+    AC_PosControl*& pos_control;
+    AC_AttitudeControl_Multi*& attitude_control;
+    AC_Loiter*& loiter_nav;
+    QuadPlane::PosControlState &poscontrol;
+
 };
 
 
@@ -443,6 +461,8 @@ public:
     // used as a base class for all Q modes
     bool _enter() override;
 
+    void run() override;
+
 protected:
 private:
 
@@ -465,6 +485,8 @@ public:
     // methods that affect movement of the vehicle in this mode
     void update() override;
 
+    void run() override;
+
 protected:
 
     bool _enter() override;
@@ -472,6 +494,8 @@ protected:
 
 class ModeQLoiter : public Mode
 {
+friend class QuadPlane;
+friend class ModeQLand;
 public:
 
     Number mode_number() const override { return Number::QLOITER; }
@@ -483,6 +507,8 @@ public:
 
     // methods that affect movement of the vehicle in this mode
     void update() override;
+
+    void run() override;
 
 protected:
 
@@ -501,6 +527,8 @@ public:
 
     // methods that affect movement of the vehicle in this mode
     void update() override;
+
+    void run() override;
 
     bool allows_arming() const override { return false; }
 
@@ -522,7 +550,13 @@ public:
     // methods that affect movement of the vehicle in this mode
     void update() override;
 
+    void run() override;
+
     bool allows_arming() const override { return false; }
+
+    bool does_auto_throttle() const override { return true; }
+
+    bool update_target_altitude() override;
 
 protected:
 
@@ -544,6 +578,8 @@ public:
     // methods that affect movement of the vehicle in this mode
     void update() override;
 
+    void run() override;
+
 protected:
 
     bool _enter() override;
@@ -559,6 +595,8 @@ public:
 
     bool is_vtol_mode() const override { return true; }
     virtual bool is_vtol_man_mode() const override { return true; }
+
+    void run() override;
 
     // methods that affect movement of the vehicle in this mode
     void update() override;

@@ -180,12 +180,16 @@ uint32_t UARTDriver::txspace(void)
 
 int16_t UARTDriver::read(void)
 {
-    if (available() <= 0) {
+    uint8_t c;
+    if (read(&c, 1) == 0) {
         return -1;
     }
-    uint8_t c;
-    _readbuffer.read(&c, 1);
     return c;
+}
+
+ssize_t UARTDriver::read(uint8_t *buffer, uint16_t count)
+{
+    return _readbuffer.read(buffer, count);
 }
 
 bool UARTDriver::discard_input(void)
@@ -679,7 +683,7 @@ void UARTDriver::_timer_tick(void)
     ssize_t nwritten;
     uint32_t max_bytes = 10000;
 #if !defined(HAL_BUILD_AP_PERIPH)
-    SITL::SITL *_sitl = AP::sitl();
+    SITL::SIM *_sitl = AP::sitl();
     if (_sitl && _sitl->telem_baudlimit_enable) {
         // limit byte rate to configured baudrate
         uint32_t now = AP_HAL::micros();

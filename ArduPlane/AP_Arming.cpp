@@ -21,6 +21,11 @@ const AP_Param::GroupInfo AP_Arming_Plane::var_info[] = {
  */
 bool AP_Arming_Plane::pre_arm_checks(bool display_failure)
 {
+    if (armed || require == (uint8_t)Required::NO) {
+        // if we are already armed or don't need any arming checks
+        // then skip the checks
+        return true;
+    }
     //are arming checks disabled?
     if (checks_to_perform == 0) {
         return true;
@@ -109,6 +114,20 @@ bool AP_Arming_Plane::pre_arm_checks(bool display_failure)
     if (SRV_Channels::get_emergency_stop()) {
         check_failed(display_failure,"Motors Emergency Stopped");
         ret = false;
+    }
+
+    if (plane.quadplane.enabled() && ((plane.quadplane.options & QuadPlane::OPTION_ONLY_ARM_IN_QMODE_OR_AUTO) != 0) &&
+            !plane.control_mode->is_vtol_mode() && (plane.control_mode != &plane.mode_auto)) {
+        check_failed(display_failure,"not in Q mode");
+        ret = false;
+    }
+
+    if (plane.g2.flight_options & FlightOptions::CENTER_THROTTLE_TRIM){
+       int16_t trim = plane.channel_throttle->get_radio_trim();
+       if (trim < 1250 || trim > 1750) {
+           check_failed(display_failure, "Throttle trim not near center stick(%u)",trim );
+           ret = false;
+       }
     }
 
     return ret;
@@ -241,7 +260,7 @@ bool AP_Arming_Plane::disarm(const AP_Arming::Method method, bool do_disarm_chec
     plane.throttle_suppressed = plane.control_mode->does_auto_throttle();
 
     // if no airmode switch assigned, ensure airmode is off:
-    if (rc().find_channel_for_option(RC_Channel::AUX_FUNC::AIRMODE) == nullptr) {
+    if ((plane.quadplane.air_mode == AirMode::ON) && (rc().find_channel_for_option(RC_Channel::AUX_FUNC::AIRMODE) == nullptr)) {
         plane.quadplane.air_mode = AirMode::OFF;
     }
 
@@ -264,7 +283,7 @@ bool AP_Arming_Plane::disarm(const AP_Arming::Method method, bool do_disarm_chec
 
 void AP_Arming_Plane::update_soft_armed()
 {
-    hal.util->set_soft_armed(is_armed() &&
+    hal.util->set_soft_armed((plane.quadplane.motor_test.running || is_armed()) &&
                              hal.util->safety_switch_state() != AP_HAL::Util::SAFETY_DISARMED);
     AP::logger().set_vehicle_armed(hal.util->get_soft_armed());
 

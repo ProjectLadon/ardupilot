@@ -72,13 +72,16 @@
 // use.
 #define AP_PARAM_FLAG_INTERNAL_USE_ONLY (1<<5)
 
+// hide parameter from param download
+#define AP_PARAM_FLAG_HIDDEN (1<<6)
+
 // keep all flags before the FRAME tags
 
 // vehicle and frame type flags, used to hide parameters when not
 // relevent to a vehicle type. Use AP_Param::set_frame_type_flags() to
 // enable parameters flagged in this way. frame type flags are stored
 // in flags field, shifted by AP_PARAM_FRAME_TYPE_SHIFT.
-#define AP_PARAM_FRAME_TYPE_SHIFT   6
+#define AP_PARAM_FRAME_TYPE_SHIFT   7
 
 // supported frame types for parameters
 #define AP_PARAM_FRAME_COPTER       (1<<0)
@@ -304,6 +307,7 @@ public:
     /// @param  value           The new value
     /// @return                 true if the variable is found
     static bool set_and_save_by_name(const char *name, float value);
+    static bool set_and_save_by_name_ifchanged(const char *name, float value);
     // name helper for scripting
     static bool set_and_save(const char *name, float value) { return set_and_save_by_name(name, value); };
 
@@ -354,7 +358,7 @@ public:
     ///
     /// @return                True if the variable was saved successfully.
     ///
-    void save_sync(bool force_save=false);
+    void save_sync(bool force_save, bool send_to_gcs);
 
     /// flush all pending parameter saves
     /// used on reboot
@@ -440,6 +444,13 @@ public:
     static void         convert_parent_class(uint8_t param_key, void *object_pointer,
                                              const struct AP_Param::GroupInfo *group_info);
 
+    /*
+      fetch a parameter value based on the index within a group. This
+      is used to find the old value of a parameter that has been
+      removed from an object.
+    */
+    static bool get_param_by_index(void *obj_ptr, uint8_t idx, ap_var_type old_ptype, void *pvalue);
+    
     /// Erase all variables in EEPROM.
     ///
     static void         erase_all(void);

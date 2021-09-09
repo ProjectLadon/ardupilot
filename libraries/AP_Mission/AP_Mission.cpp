@@ -915,7 +915,9 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
 
     case MAV_CMD_NAV_LAND:                              // MAV ID: 21
         cmd.p1 = packet.param1;                         // abort target altitude(m)  (plane only)
-        cmd.content.location.loiter_ccw = is_negative(packet.param4); // yaw direction, (plane deepstall only)
+        if (!isnan(packet.param4)) {
+            cmd.content.location.loiter_ccw = is_negative(packet.param4); // yaw direction, (plane deepstall only)
+        }
         break;
 
     case MAV_CMD_NAV_TAKEOFF:                           // MAV ID: 22
@@ -1978,7 +1980,7 @@ uint16_t AP_Mission::num_commands_max(void) const
 // find the nearest landing sequence starting point (DO_LAND_START) and
 // return its index.  Returns 0 if no appropriate DO_LAND_START point can
 // be found.
-uint16_t AP_Mission::get_landing_sequence_start() const
+uint16_t AP_Mission::get_landing_sequence_start()
 {
     struct Location current_loc;
 
@@ -1996,6 +1998,10 @@ uint16_t AP_Mission::get_landing_sequence_start() const
             continue;
         }
         if (tmp.id == MAV_CMD_DO_LAND_START) {
+            if (!tmp.content.location.initialised() && !get_next_nav_cmd(i, tmp)) {
+                // command does not have a valid location and cannot get next valid
+                continue;
+            }
             float tmp_distance = tmp.content.location.get_distance(current_loc);
             if (min_distance < 0 || tmp_distance < min_distance) {
                 min_distance = tmp_distance;

@@ -38,14 +38,7 @@ void RC_Channel_Plane::do_aux_function_change_mode(const Mode::Number number,
     switch(ch_flag) {
     case AuxSwitchPos::HIGH: {
         // engage mode (if not possible we remain in current flight mode)
-        const bool success = plane.set_mode_by_number(number, ModeReason::RC_COMMAND);
-        if (plane.control_mode != &plane.mode_initializing) {
-            if (success) {
-                AP_Notify::events.user_mode_change = 1;
-            } else {
-                AP_Notify::events.user_mode_change_failed = 1;
-            }
-        }
+        plane.set_mode_by_number(number, ModeReason::RC_COMMAND);
         break;
     }
     default:
@@ -135,11 +128,6 @@ void RC_Channel_Plane::do_aux_function_flare(AuxSwitchPos ch_flag)
         }    
 }
 
-void RC_Channel_Plane::do_aux_function_mission_reset(const AuxSwitchPos ch_flag)
-{
-    plane.mission.start();
-    plane.prev_WP_loc = plane.current_loc;
-}
 
 void RC_Channel_Plane::init_aux_function(const RC_Channel::aux_func_t ch_option,
                                          const RC_Channel::AuxSwitchPos ch_flag)
@@ -148,6 +136,8 @@ void RC_Channel_Plane::init_aux_function(const RC_Channel::aux_func_t ch_option,
     // the following functions do not need to be initialised:
     case AUX_FUNC::AUTO:
     case AUX_FUNC::CIRCLE:
+    case AUX_FUNC::ACRO:
+    case AUX_FUNC::TRAINING:
     case AUX_FUNC::FLAP:
     case AUX_FUNC::GUIDED:
     case AUX_FUNC::INVERTED:
@@ -161,6 +151,7 @@ void RC_Channel_Plane::init_aux_function(const RC_Channel::aux_func_t ch_option,
     case AUX_FUNC::LANDING_FLARE:
     case AUX_FUNC::PARACHUTE_RELEASE:
     case AUX_FUNC::MODE_SWITCH_RESET:
+    case AUX_FUNC::CRUISE:
         break;
 
     case AUX_FUNC::Q_ASSIST:
@@ -169,7 +160,9 @@ void RC_Channel_Plane::init_aux_function(const RC_Channel::aux_func_t ch_option,
 #if AP_AIRSPEED_AUTOCAL_ENABLE
     case AUX_FUNC::ARSPD_CALIBRATE:
 #endif
-        do_aux_function(ch_option, ch_flag);
+    case AUX_FUNC::TER_DISABLE:
+    case AUX_FUNC::CROW_SELECT:
+        run_aux_function(ch_option, ch_flag, AuxFuncTriggerSource::INIT);
         break;
 
     case AUX_FUNC::REVERSE_THROTTLE:
@@ -181,14 +174,6 @@ void RC_Channel_Plane::init_aux_function(const RC_Channel::aux_func_t ch_option,
         }
         // note that we don't call do_aux_function() here as we don't
         // want to startup with reverse thrust
-        break;
-
-    case AUX_FUNC::TER_DISABLE:
-        do_aux_function(ch_option, ch_flag);
-        break;
-
-    case AUX_FUNC::CROW_SELECT:
-        do_aux_function(ch_option, ch_flag);
         break;
 
     default:
@@ -218,7 +203,15 @@ bool RC_Channel_Plane::do_aux_function(const aux_func_t ch_option, const AuxSwit
     case AUX_FUNC::CIRCLE:
         do_aux_function_change_mode(Mode::Number::CIRCLE, ch_flag);
         break;
-            
+
+    case AUX_FUNC::ACRO:
+        do_aux_function_change_mode(Mode::Number::ACRO, ch_flag);
+        break;
+
+    case AUX_FUNC::TRAINING:
+        do_aux_function_change_mode(Mode::Number::TRAINING, ch_flag);
+        break;
+        
     case AUX_FUNC::LOITER:
         do_aux_function_change_mode(Mode::Number::LOITER, ch_flag);
         break;        
@@ -323,6 +316,11 @@ case AUX_FUNC::ARSPD_CALIBRATE:
     case AUX_FUNC::MODE_SWITCH_RESET:
         plane.reset_control_switch();
         break;
+
+    case AUX_FUNC::CRUISE:
+        do_aux_function_change_mode(Mode::Number::CRUISE, ch_flag);
+        break;
+
 
     default:
         return RC_Channel::do_aux_function(ch_option, ch_flag);

@@ -13,6 +13,7 @@
  */
 #pragma once
 
+#include <AP_HAL/AP_HAL.h>
 #include <AP_Common/AP_Common.h>
 #include <AP_Param/AP_Param.h>
 #include <AP_Common/Bitmask.h>
@@ -20,11 +21,16 @@
 #include <AP_RobotisServo/AP_RobotisServo.h>
 #include <AP_SBusOut/AP_SBusOut.h>
 #include <AP_BLHeli/AP_BLHeli.h>
+#include <AP_FETtecOneWire/AP_FETtecOneWire.h>
 
-#if !defined(NUM_SERVO_CHANNELS) && defined(HAL_BUILD_AP_PERIPH) && defined(HAL_PWM_COUNT) && (HAL_PWM_COUNT >= 1)
+#ifndef NUM_SERVO_CHANNELS
+#if defined(HAL_BUILD_AP_PERIPH) && defined(HAL_PWM_COUNT)
     #define NUM_SERVO_CHANNELS HAL_PWM_COUNT
+#elif defined(HAL_BUILD_AP_PERIPH)
+    #define NUM_SERVO_CHANNELS 0
 #else
     #define NUM_SERVO_CHANNELS 16
+#endif
 #endif
 
 class SRV_Channels;
@@ -45,6 +51,7 @@ public:
 
     typedef enum
     {
+        k_GPIO                  = -1,           ///< used as GPIO pin (input or output)
         k_none                  = 0,            ///< disabled
         k_manual                = 1,            ///< manual, just pass-thru the RC in signal
         k_flap                  = 2,            ///< flap
@@ -168,6 +175,7 @@ public:
         k_min                   = 134,  // always outputs SERVOn_MIN
         k_trim                  = 135,  // always outputs SERVOn_TRIM
         k_max                   = 136,  // always outputs SERVOn_MAX
+        k_mast_rotation         = 137,
         k_nr_aux_servo_functions         ///< This must be the last enum value (only add new values _before_ this one)
     } Aux_servo_function_t;
 
@@ -469,8 +477,15 @@ public:
     // calculate PWM for all channels
     static void calc_pwm(void);
 
+    // return the ESC type for dshot commands
+    static AP_HAL::RCOutput::DshotEscType get_dshot_esc_type() { return AP_HAL::RCOutput::DshotEscType(_singleton->dshot_esc_type.get()); }
+
     static SRV_Channel *srv_channel(uint8_t i) {
+#if NUM_SERVO_CHANNELS > 0
         return i<NUM_SERVO_CHANNELS?&channels[i]:nullptr;
+#else
+        return nullptr;
+#endif
     }
 
     // SERVO* parameters
@@ -491,15 +506,14 @@ public:
     // disable output to a set of channels given by a mask. This is used by the AP_BLHeli code
     static void set_disabled_channel_mask(uint16_t mask) { disabled_mask = mask; }
 
-    // add to mask of outputs which can do reverse thrust using digital controls
-    static void set_reversible_mask(uint16_t mask) {
-        reversible_mask |= mask;
-    }
+    // add to mask of outputs which use digital (non-PWM) output and optionally can reverse thrust, such as DShot
+    static void set_digital_outputs(uint16_t dig_mask, uint16_t rev_mask);
 
-    // add to mask of outputs which use digital (non-PWM) output, such as DShot
-    static void set_digital_mask(uint16_t mask) {
-        digital_mask |= mask;
-    }
+    // return true if all of the outputs in mask are digital
+    static bool have_digital_outputs(uint16_t mask) { return mask != 0 && (mask & digital_mask) == mask; }
+
+    // return true if any of the outputs are digital
+    static bool have_digital_outputs() { return digital_mask != 0; }
 
     // Set E - stop
     static void set_emergency_stop(bool state) {
@@ -518,6 +532,11 @@ public:
 
     // initialize before any call to push
     static void init();
+
+    // return true if a channel is set to type GPIO
+    static bool is_GPIO(uint8_t channel) {
+        return channel_function(channel) == SRV_Channel::k_GPIO;
+    }
 
 private:
 
@@ -550,6 +569,11 @@ private:
     AP_BLHeli blheli;
     static AP_BLHeli *blheli_ptr;
 #endif
+
+#if HAL_AP_FETTEC_ONEWIRE_ENABLED
+    AP_FETtecOneWire fetteconwire;
+    static AP_FETtecOneWire *fetteconwire_ptr;
+#endif  // HAL_AP_FETTEC_ONEWIRE_ENABLED
 #endif // HAL_BUILD_AP_PERIPH
 
     static uint16_t disabled_mask;
@@ -577,6 +601,7 @@ private:
     AP_Int8 auto_trim;
     AP_Int16 default_rate;
     AP_Int8 dshot_rate;
+    AP_Int8 dshot_esc_type;
 
     // return true if passthrough is disabled
     static bool passthrough_disabled(void) {

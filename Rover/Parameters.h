@@ -6,6 +6,7 @@
 #include "AC_Sprayer/AC_Sprayer.h"
 #include "AP_Gripper/AP_Gripper.h"
 #include "AP_Rally.h"
+#include "AP_Torqeedo/AP_Torqeedo.h"
 
 // Global parameter class.
 //
@@ -60,7 +61,7 @@ public:
         // 97: RSSI
         k_param_rssi = 97,
         k_param_rpm_sensor,     // rpm sensor 98
-        
+
         // 100: Arming parameters
         k_param_arming = 100,
 
@@ -117,7 +118,7 @@ public:
         k_param_auto_trigger_pin,
         k_param_auto_kickstart,
         k_param_turn_circle,  // unused
-        k_param_turn_max_g,
+        k_param_turn_max_g_old, // unused
 
         //
         // 160: Radio settings
@@ -239,7 +240,6 @@ public:
     AP_Int8     ch7_option;
     AP_Int8     auto_trigger_pin;
     AP_Float    auto_kickstart;
-    AP_Float    turn_max_g;
     AP_Int16    gcs_pid_mask;
 
     // Throttle
@@ -407,6 +407,15 @@ public:
 
     // angle max
     AP_Float angle_max;
+#if HAL_TORQEEDO_ENABLED
+    // torqeedo motor driver
+    AP_Torqeedo torqeedo;
+#endif
+
+#if HAL_AIS_ENABLED
+    // Automatic Identification System - for tracking sea-going vehicles
+    AP_AIS ais;
+#endif
 };
 
 extern const AP_Param::Info var_info[];

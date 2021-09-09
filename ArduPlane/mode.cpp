@@ -1,6 +1,11 @@
 #include "Plane.h"
 
-Mode::Mode()
+Mode::Mode() :
+    quadplane(plane.quadplane),
+    pos_control(plane.quadplane.pos_control),
+    attitude_control(plane.quadplane.attitude_control),
+    loiter_nav(plane.quadplane.loiter_nav),
+    poscontrol(plane.quadplane.poscontrol)
 {
 }
 
@@ -60,8 +65,8 @@ bool Mode::enter()
     // record time of mode change
     plane.last_mode_change_ms = AP_HAL::millis();
 
-    // assume non-VTOL mode
-    plane.auto_state.vtol_mode = false;
+    // set VTOL auto state
+    plane.auto_state.vtol_mode = is_vtol_mode();
     plane.auto_state.vtol_loiter = false;
 
     // initialize speed variable used in AUTO and GUIDED for DO_CHANGE_SPEED commands
@@ -91,7 +96,7 @@ bool Mode::enter()
 
 bool Mode::is_vtol_man_throttle() const
 {
-    if (plane.quadplane.is_tailsitter_in_fw_flight() &&
+    if (plane.quadplane.tailsitter.is_in_fw_flight() &&
         plane.quadplane.assisted_flight) {
         // We are a tailsitter that has fully transitioned to Q-assisted forward flight.
         // In this case the forward throttle directly drives the vertical throttle so

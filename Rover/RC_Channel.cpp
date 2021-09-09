@@ -21,10 +21,8 @@ void RC_Channel_Rover::mode_switch_changed(modeswitch_pos_t new_pos)
         // should not have been called
         return;
     }
-    Mode *new_mode = rover.mode_from_mode_num((Mode::Number)rover.modes[new_pos].get());
-    if (new_mode != nullptr) {
-        rover.set_mode(*new_mode, ModeReason::RC_COMMAND);
-    }
+
+    rover.set_mode((Mode::Number)rover.modes[new_pos].get(), ModeReason::RC_COMMAND);
 }
 
 // init_aux_switch_function - initialize aux functions
@@ -53,6 +51,7 @@ void RC_Channel_Rover::init_aux_function(const aux_func_t ch_option, const AuxSw
     case AUX_FUNC::SIMPLE:
     case AUX_FUNC::SMART_RTL:
     case AUX_FUNC::STEERING:
+    case AUX_FUNC::WIND_VANE_DIR_OFSSET:
         break;
     case AUX_FUNC::SAILBOAT_MOTOR_3POS:
         do_aux_function_sailboat_motor_3pos(ch_flag);
@@ -247,6 +246,7 @@ bool RC_Channel_Rover::do_aux_function(const aux_func_t ch_option, const AuxSwit
     case AUX_FUNC::ROLL:
     case AUX_FUNC::WALKING_HEIGHT:
     case AUX_FUNC::FLAP:
+    case AUX_FUNC::WIND_VANE_DIR_OFSSET:
         break;
 
     default:
