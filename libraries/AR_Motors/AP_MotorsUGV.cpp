@@ -1054,6 +1054,7 @@ void AP_MotorsUGV::output_roll_pitch()
     float flaperon_right = constrain_float(_roll - flap, -4500, 4500);
     SRV_Channels::set_output_scaled(SRV_Channel::k_flaperon_left, flaperon_left);
     SRV_Channels::set_output_scaled(SRV_Channel::k_flaperon_right, flaperon_right);
+}
 
 namespace AP {
     AP_MotorsUGV *motors_ugv()
