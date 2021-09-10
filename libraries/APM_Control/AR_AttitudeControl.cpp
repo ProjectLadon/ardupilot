@@ -395,6 +395,127 @@ const AP_Param::GroupInfo AR_AttitudeControl::var_info[] = {
 
     AP_SUBGROUPINFO(_sailboat_heel_pid, "_SAIL_", 12, AR_AttitudeControl, AC_PID),
 
+    // @Param: _ROLL_P
+    // @DisplayName: Roll control P gain
+    // @Description: Roll angle controller P gain
+    // @Range: 0.000 2.000
+    // @Increment: 0.01
+    // @User: Standard
+
+    // @Param: _ROLL_I
+    // @DisplayName: Roll control I gain
+    // @Description: Roll angle controller I gain
+    // @Range: 0.000 2.000
+    // @User: Standard
+
+    // @Param: _ROLL_IMAX
+    // @DisplayName: Roll control I gain maximum
+    // @Description: Roll control I gain maximum gain
+    // @Range: 0.000 1.000
+    // @Increment: 0.01
+    // @User: Standard
+
+    // @Param: _ROLL_D
+    // @DisplayName: Roll control D gain
+    // @Description: Roll control D gain
+    // @Range: 0.000 0.100
+    // @Increment: 0.001
+    // @User: Standard
+
+    // @Param: _ROLL_FF
+    // @DisplayName: Roll control feed forward
+    // @Description: Roll control feed forward
+    // @Range: 0.000 0.500
+    // @Increment: 0.001
+    // @User: Standard
+
+    // @Param: _ROLL_FILT
+    // @DisplayName: Roll control filter frequency
+    // @Description: Roll control input filter.  Lower values reduce noise but add delay.
+    // @Range: 0.000 100.000
+    // @Increment: 0.1
+    // @Units: Hz
+    // @User: Standard
+
+    // @Param: _ROLL_FLTT
+    // @DisplayName: Roll control Target filter frequency in Hz
+    // @Description: Target filter frequency in Hz
+    // @Units: Hz
+    // @User: Standard
+
+    // @Param: _ROLL_FLTE
+    // @DisplayName: Roll control Error filter frequency in Hz
+    // @Description: Error filter frequency in Hz
+    // @Units: Hz
+    // @User: Standard
+
+    // @Param: _ROLL_FLTD
+    // @DisplayName: Roll control Derivative term filter frequency in Hz
+    // @Description: Derivative filter frequency in Hz
+    // @Units: Hz
+    // @User: Standard
+    AP_SUBGROUPINFO(_roll_pid, "_ROLL_", 13, AR_AttitudeControl, AC_PID),
+
+    // @Param: _PITCH_P
+    // @DisplayName: Pitch control P gain
+    // @Description: Pitch angle controller P gain
+    // @Range: 0.000 2.000
+    // @Increment: 0.01
+    // @User: Standard
+
+    // @Param: _PITCH_I
+    // @DisplayName: Pitch control I gain
+    // @Description: Pitch angle controller I gain
+    // @Range: 0.000 2.000
+    // @User: Standard
+
+    // @Param: _PITCH_IMAX
+    // @DisplayName: Pitch control I gain maximum
+    // @Description: Pitch control I gain maximum gain
+    // @Range: 0.000 1.000
+    // @Increment: 0.01
+    // @User: Standard
+
+    // @Param: _PITCH_D
+    // @DisplayName: Pitch control D gain
+    // @Description: Pitch control D gain
+    // @Range: 0.000 0.100
+    // @Increment: 0.001
+    // @User: Standard
+
+    // @Param: _PITCH_FF
+    // @DisplayName: Pitch control feed forward
+    // @Description: Pitch control feed forward
+    // @Range: 0.000 0.500
+    // @Increment: 0.001
+    // @User: Standard
+
+    // @Param: _PITCH_FILT
+    // @DisplayName: Pitch control filter frequency
+    // @Description: Pitch control input filter.  Lower values reduce noise but add delay.
+    // @Range: 0.000 100.000
+    // @Increment: 0.1
+    // @Units: Hz
+    // @User: Standard
+
+    // @Param: _PITCH_FLTT
+    // @DisplayName: Pitch control Target filter frequency in Hz
+    // @Description: Target filter frequency in Hz
+    // @Units: Hz
+    // @User: Standard
+
+    // @Param: _PITCH_FLTE
+    // @DisplayName: Pitch control Error filter frequency in Hz
+    // @Description: Error filter frequency in Hz
+    // @Units: Hz
+    // @User: Standard
+
+    // @Param: _PITCH_FLTD
+    // @DisplayName: Pitch control Derivative term filter frequency in Hz
+    // @Description: Derivative filter frequency in Hz
+    // @Units: Hz
+    // @User: Standard
+    AP_SUBGROUPINFO(_pitch_pid, "_PITCH_", 14, AR_AttitudeControl, AC_PID),
     // @Param: _TURN_MAX_G
     // @DisplayName: Turning maximum G force
     // @Description: The maximum turning acceleration (in units of gravities) that the rover can handle while remaining stable. The navigation code will keep the lateral acceleration below this level to avoid rolling over or slipping the wheels in turns
@@ -402,7 +523,7 @@ const AP_Param::GroupInfo AR_AttitudeControl::var_info[] = {
     // @Range: 0.1 10
     // @Increment: 0.01
     // @User: Standard
-    AP_GROUPINFO("_TURN_MAX_G", 13, AR_AttitudeControl, _turn_lateral_G_max, 0.6f),
+    AP_GROUPINFO("_TURN_MAX_G", 15, AR_AttitudeControl, _turn_lateral_G_max, 0.6f),
 
     AP_GROUPEND
 };
@@ -412,7 +533,9 @@ AR_AttitudeControl::AR_AttitudeControl() :
     _steer_rate_pid(AR_ATTCONTROL_STEER_RATE_P, AR_ATTCONTROL_STEER_RATE_I, AR_ATTCONTROL_STEER_RATE_D, AR_ATTCONTROL_STEER_RATE_FF, AR_ATTCONTROL_STEER_RATE_IMAX, 0.0f, AR_ATTCONTROL_STEER_RATE_FILT, 0.0f, AR_ATTCONTROL_DT),
     _throttle_speed_pid(AR_ATTCONTROL_THR_SPEED_P, AR_ATTCONTROL_THR_SPEED_I, AR_ATTCONTROL_THR_SPEED_D, 0.0f, AR_ATTCONTROL_THR_SPEED_IMAX, 0.0f, AR_ATTCONTROL_THR_SPEED_FILT, 0.0f, AR_ATTCONTROL_DT),
     _pitch_to_throttle_pid(AR_ATTCONTROL_PITCH_THR_P, AR_ATTCONTROL_PITCH_THR_I, AR_ATTCONTROL_PITCH_THR_D, 0.0f, AR_ATTCONTROL_PITCH_THR_IMAX, 0.0f, AR_ATTCONTROL_PITCH_THR_FILT, 0.0f, AR_ATTCONTROL_DT),
-    _sailboat_heel_pid(AR_ATTCONTROL_HEEL_SAIL_P, AR_ATTCONTROL_HEEL_SAIL_I, AR_ATTCONTROL_HEEL_SAIL_D, 0.0f, AR_ATTCONTROL_HEEL_SAIL_IMAX, 0.0f, AR_ATTCONTROL_HEEL_SAIL_FILT, 0.0f, AR_ATTCONTROL_DT)
+    _sailboat_heel_pid(AR_ATTCONTROL_HEEL_SAIL_P, AR_ATTCONTROL_HEEL_SAIL_I, AR_ATTCONTROL_HEEL_SAIL_D, 0.0f, AR_ATTCONTROL_HEEL_SAIL_IMAX, 0.0f, AR_ATTCONTROL_HEEL_SAIL_FILT, 0.0f, AR_ATTCONTROL_DT),
+    _roll_pid(AR_ATTCONTROL_ROLL_P, AR_ATTCONTROL_ROLL_I, AR_ATTCONTROL_ROLL_D, 0.0f, AR_ATTCONTROL_ROLL_IMAX, 0.0f, AR_ATTCONTROL_ROLL_FILT, 0.0f, AR_ATTCONTROL_DT),
+    _pitch_pid(AR_ATTCONTROL_PITCH_P, AR_ATTCONTROL_PITCH_I, AR_ATTCONTROL_PITCH_D, 0.0f, AR_ATTCONTROL_PITCH_IMAX, 0.0f, AR_ATTCONTROL_PITCH_FILT, 0.0f, AR_ATTCONTROL_DT)
     {
     AP_Param::setup_object_defaults(this, var_info);
 }
@@ -743,19 +866,89 @@ float AR_AttitudeControl::get_sail_out_from_heel(float desired_heel, float dt)
     // get d
     const float d = _sailboat_heel_pid.get_d();
 
-    // constrain and return final output
+    // return final output
     return (ff + p + i + d) * -1.0f;
+}
+
+// roll angle controller for boats with trim tabs
+float AR_AttitudeControl::get_servo_out_from_roll(float desired_roll, float dt)
+{
+    // sanity check dt
+    dt = constrain_float(dt, 0.0f, 1.0f);
+
+    // if not called recently, reset input filter
+    const uint32_t now = AP_HAL::millis();
+    if ((_roll_controller_last_ms == 0) || ((now - _roll_controller_last_ms) > AR_ATTCONTROL_TIMEOUT_MS)) {
+        _roll_pid.reset_filter();
+        _roll_pid.reset_I();
+    }
+    _roll_controller_last_ms = now;
+
+    // set PID's dt
+    _roll_pid.set_dt(dt);
+
+    _roll_pid.update_all(desired_roll, AP::ahrs().roll);
+
+    // get feed-forward
+    const float ff = _roll_pid.get_ff();
+
+    // get p
+    const float p = _roll_pid.get_p();
+
+    // get i
+    const float i = _roll_pid.get_i();
+
+    // get d
+    const float d = _roll_pid.get_d();
+
+    // return final output
+    return (ff + p + i + d);
+}
+
+// pitch angle controller for boats with trim tabs
+float AR_AttitudeControl::get_servo_out_from_pitch(float desired_pitch, float dt)
+{
+    // sanity check dt
+    dt = constrain_float(dt, 0.0f, 1.0f);
+
+    // if not called recently, reset input filter
+    const uint32_t now = AP_HAL::millis();
+    if ((_pitch_controller_last_ms == 0) || ((now - _pitch_controller_last_ms) > AR_ATTCONTROL_TIMEOUT_MS)) {
+        _pitch_pid.reset_filter();
+        _pitch_pid.reset_I();
+    }
+    _pitch_controller_last_ms = now;
+
+    // set PID's dt
+    _pitch_pid.set_dt(dt);
+
+    _pitch_pid.update_all(desired_pitch, AP::ahrs().pitch);
+
+    // get feed-forward
+    const float ff = _pitch_pid.get_ff();
+
+    // get p
+    const float p = _pitch_pid.get_p();
+
+    // get i
+    const float i = _pitch_pid.get_i();
+
+    // get d
+    const float d = _pitch_pid.get_d();
+
+    // return final output
+    return (ff + p + i + d );
 }
 
 // get forward speed in m/s (earth-frame horizontal velocity but only along vehicle x-axis).  returns true on success
 bool AR_AttitudeControl::get_forward_speed(float &speed) const
 {
     Vector3f velocity;
-    const AP_AHRS &_ahrs = AP::ahrs();
-    if (!_ahrs.get_velocity_NED(velocity)) {
+    // const AP_AHRS &_ahrs = AP::ahrs();
+    if (!AP::ahrs().get_velocity_NED(velocity)) {
         // use less accurate GPS, assuming entire length is along forward/back axis of vehicle
         if (AP::gps().status() >= AP_GPS::GPS_OK_FIX_3D) {
-            if (abs(wrap_180_cd(_ahrs.yaw_sensor - AP::gps().ground_course_cd())) <= 9000) {
+            if (abs(wrap_180_cd(AP::ahrs().yaw_sensor - AP::gps().ground_course_cd())) <= 9000) {
                 speed = AP::gps().ground_speed();
             } else {
                 speed = -AP::gps().ground_speed();
@@ -766,7 +959,7 @@ bool AR_AttitudeControl::get_forward_speed(float &speed) const
         }
     }
     // calculate forward speed velocity into body frame
-    speed = velocity.x*_ahrs.cos_yaw() + velocity.y*_ahrs.sin_yaw();
+    speed = velocity.x*AP::ahrs().cos_yaw() + velocity.y*AP::ahrs().sin_yaw();
     return true;
 }
 

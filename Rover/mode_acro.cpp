@@ -83,6 +83,7 @@ void ModeAcro::update()
     g2.motors.set_mainsail(desired_mainsail);
     g2.motors.set_foresail_flap_limit(desired_fore_flap);
     g2.motors.set_mizzen_flap_limit(desired_mizzen_flap);
+    calc_and_set_roll_pitch();
 }
 
 bool ModeAcro::requires_velocity() const
