@@ -276,8 +276,42 @@ void GCS_MAVLINK_Rover::send_pid_tuning()
     if (g.gcs_pid_mask & 32) {
         pid_info = &g2.attitude_control.get_sailboat_heel_pid().get_pid_info();
         mavlink_msg_pid_tuning_send(chan, 9,
-                                    pid_info->target,
-                                    pid_info->actual,
+                                    degrees(pid_info->target),
+                                    degrees(pid_info->actual),
+                                    pid_info->FF,
+                                    pid_info->P,
+                                    pid_info->I,
+                                    pid_info->D,
+                                    pid_info->slew_rate,
+                                    pid_info->Dmod);
+        if (!HAVE_PAYLOAD_SPACE(chan, PID_TUNING)) {
+            return;
+        }
+    }
+
+    // roll angle pid
+    if (g.gcs_pid_mask & 64) {
+        pid_info = &g2.attitude_control.get_roll_pid().get_pid_info();
+        mavlink_msg_pid_tuning_send(chan, 10,
+                                    degrees(pid_info->target),
+                                    degrees(pid_info->actual),
+                                    pid_info->FF,
+                                    pid_info->P,
+                                    pid_info->I,
+                                    pid_info->D,
+                                    pid_info->slew_rate,
+                                    pid_info->Dmod);
+        if (!HAVE_PAYLOAD_SPACE(chan, PID_TUNING)) {
+            return;
+        }
+    }
+
+    // pitch angle pid
+    if (g.gcs_pid_mask & 128) {
+        pid_info = &g2.attitude_control.get_pitch_pid().get_pid_info();
+        mavlink_msg_pid_tuning_send(chan, 11,
+                                    degrees(pid_info->target),
+                                    degrees(pid_info->actual),
                                     pid_info->FF,
                                     pid_info->P,
                                     pid_info->I,
@@ -1083,9 +1117,9 @@ uint8_t GCS_MAVLINK_Rover::high_latency_tgt_heading() const
         // need to convert -180->180 to 0->360/2
         return wrap_360(control_mode->wp_bearing()) / 2;
     }
-    return 0;      
+    return 0;
 }
-    
+
 uint16_t GCS_MAVLINK_Rover::high_latency_tgt_dist() const
 {
     const Mode *control_mode = rover.control_mode;
@@ -1093,7 +1127,7 @@ uint16_t GCS_MAVLINK_Rover::high_latency_tgt_dist() const
         // return units are dm
         return MIN((control_mode->get_distance_to_destination()) / 10, UINT16_MAX);
     }
-    return 0;  
+    return 0;
 }
 
 uint8_t GCS_MAVLINK_Rover::high_latency_tgt_airspeed() const
@@ -1112,7 +1146,7 @@ uint8_t GCS_MAVLINK_Rover::high_latency_wind_speed() const
         // return units are m/s*5
         return MIN(rover.g2.windvane.get_true_wind_speed() * 5, UINT8_MAX);
     }
-    return 0; 
+    return 0;
 }
 
 uint8_t GCS_MAVLINK_Rover::high_latency_wind_direction() const
@@ -1121,6 +1155,6 @@ uint8_t GCS_MAVLINK_Rover::high_latency_wind_direction() const
         // return units are deg/2
         return wrap_360(degrees(rover.g2.windvane.get_true_wind_direction_rad())) / 2;
     }
-    return 0; 
+    return 0;
 }
 #endif // HAL_HIGH_LATENCY2_ENABLED

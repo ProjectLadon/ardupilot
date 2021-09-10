@@ -63,7 +63,7 @@ const AP_Param::Info Rover::var_info[] = {
     // @DisplayName: GCS PID tuning mask
     // @Description: bitmask of PIDs to send MAVLink PID_TUNING messages for
     // @User: Advanced
-    // @Values: 0:None,1:Steering,2:Throttle,4:Pitch,8:Left Wheel,16:Right Wheel,32:Sailboat Heel
+    // @Values: 0:None,1:Steering,2:Throttle,4:Pitch,8:Left Wheel,16:Right Wheel,32:Sailboat Heel,64:roll,128:pitch
     // @Bitmask: 0:Steering,1:Throttle,2:Pitch,3:Left Wheel,4:Right Wheel,5:Sailboat Heel
     GSCALAR(gcs_pid_mask,           "GCS_PID_MASK",     0),
 
@@ -650,6 +650,13 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("FS_OPTIONS", 48, ParametersG2, fs_options, 0),
 
+    // @Param: ANGLE_MAX
+    // @DisplayName: Rover roll and pitch angle max
+    // @Description:  Rover roll and pitch angle max
+    // @Units: deg
+    // @Range: 0 45
+    // @User: Standard
+    AP_GROUPINFO("ANGLE_MAX", 49, ParametersG2, angle_max, 10),
 #if HAL_TORQEEDO_ENABLED
     // @Group: TRQD_
     // @Path: ../libraries/AP_Torqeedo/AP_Torqeedo.cpp

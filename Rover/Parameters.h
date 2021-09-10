@@ -61,7 +61,7 @@ public:
         // 97: RSSI
         k_param_rssi = 97,
         k_param_rpm_sensor,     // rpm sensor 98
-        
+
         // 100: Arming parameters
         k_param_arming = 100,
 
@@ -405,6 +405,8 @@ public:
     // FS options
     AP_Int32 fs_options;
 
+    // angle max
+    AP_Float angle_max;
 #if HAL_TORQEEDO_ENABLED
     // torqeedo motor driver
     AP_Torqeedo torqeedo;
