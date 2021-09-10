@@ -102,14 +102,14 @@ const AP_Param::GroupInfo Sailboat::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("LOIT_RADIUS", 9, Sailboat, loit_radius, 5),
 
-    // @Param: DIFF_STEER_MULT
+    // @Param: DIFF_K
     // @DisplayName: Differential steering gain
     // @Description: This controls how much the steering
     // @Units: unitless
     // @Range: 0 1000
     // @Increment: 1
     // @User: Standard
-    AP_GROUPINFO("DIFF_STEER_MULT", 10, Sailboat, diff_steer_mult, 100),
+    AP_GROUPINFO("DIFF_K", 10, Sailboat, diff_steer_mult, 100),
 
     AP_GROUPEND
 };
@@ -256,6 +256,7 @@ void Sailboat::get_pilot_desired_mainsail(
     wingsail_out = constrain_float(throttle, -100.0f, 100.0f);
     mast_rotation_out = constrain_float(throttle, -100.0f, 100.0f);
     differential_out = constrain_float(steering * diff_steer_mult, -100.0f, 100.0f);
+    //hal.console->printf("\nDifferential steering gain is: %6.2f\n", (float)diff_steer_mult);
     if (channel_fore_flap != nullptr) {
         fore_flap_lim_out = constrain_float(channel_fore_flap->get_control_in(), 0.0f, 100.0f);
     } else fore_flap_lim_out = 0.0f;
@@ -350,8 +351,8 @@ void Sailboat::get_throttle_and_mainsail_out(
         float mainsail_base = linear_interpolate(0.0f, 100.0f, mainsail_angle,sail_angle_min,sail_angle_max);
 
         mainsail_out = constrain_float((mainsail_base + pid_offset), 0.0f ,100.0f);
-        fore_flap_lim_out = mainsail_out;
-        mizz_flap_lim_out = mainsail_out;
+        fore_flap_lim_out = 100.0f - mainsail_out;
+        mizz_flap_lim_out = 100.0f - mainsail_out;
     }
 
     //
