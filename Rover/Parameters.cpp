@@ -660,13 +660,13 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
 #if HAL_TORQEEDO_ENABLED
     // @Group: TRQD_
     // @Path: ../libraries/AP_Torqeedo/AP_Torqeedo.cpp
-    AP_SUBGROUPINFO(torqeedo, "TRQD_", 49, ParametersG2, AP_Torqeedo),
+    AP_SUBGROUPINFO(torqeedo, "TRQD_", 50, ParametersG2, AP_Torqeedo),
 #endif
 
 #if HAL_AIS_ENABLED
     // @Group: AIS_
     // @Path: ../libraries/AP_AIS/AP_AIS.cpp
-    AP_SUBGROUPINFO(ais, "AIS_",  50, ParametersG2, AP_AIS),
+    AP_SUBGROUPINFO(ais, "AIS_",  51, ParametersG2, AP_AIS),
 #endif
 
     AP_GROUPEND
