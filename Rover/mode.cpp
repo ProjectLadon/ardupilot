@@ -186,16 +186,16 @@ void Mode::get_pilot_desired_heading_and_speed(float &heading_out, float &speed_
 // outputs are in the range -1 to +1
 void Mode::get_pilot_desired_roll_and_pitch(float &roll_out, float &pitch_out)
 {
-    if (channel_roll != nullptr) {
-        roll_out = channel_roll->norm_input();
+    if (rover.channel_roll != nullptr) {
+        roll_out = rover.channel_roll->norm_input();
     } else {
-	hal.console->printf("Sin channel not available\n");
+	//hal.console->printf("Sin channel not available\n");
         roll_out = 0.0f;
     }
-    if (channel_pitch != nullptr) {
-        pitch_out = channel_pitch->norm_input();
+    if (rover.channel_pitch != nullptr) {
+        pitch_out = rover.channel_pitch->norm_input();
     } else {
-	hal.console->printf("Cos channel not available\n");
+	//hal.console->printf("Cos channel not available\n");
         pitch_out = 0.0f;
     }
 }

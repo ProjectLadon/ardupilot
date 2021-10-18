@@ -4,8 +4,8 @@
 void ModeAcro::update()
 {
     // get speed forward
-    hal.console->printf("Executing acro mode\n");
-    hal.console->printf("===========================\n");
+    //hal.console->printf("Executing acro mode\n");
+    //hal.console->printf("===========================\n");
     float speed, desired_steering, desired_throttle, desired_speed;
     if (!attitude_control.get_forward_speed(speed)) {
         // convert pilot stick input into desired steering and throttle
@@ -13,15 +13,15 @@ void ModeAcro::update()
             desired_steering, desired_throttle);
         // no valid speed, just use the provided throttle
         g2.motors.set_throttle(desired_throttle);
-        hal.console->printf(
-            "Executing with throttle %6.2f\t", desired_throttle);
+        //hal.console->printf(
+        //    "Executing with throttle %6.2f\t", desired_throttle);
     } else {
         // convert pilot stick input into desired steering and speed
         get_pilot_desired_steering_and_speed(
             desired_steering, desired_speed);
         calc_throttle(desired_speed, true);
-        hal.console->printf(
-            "Executing with speed %6.2f\t", desired_speed);
+        //hal.console->printf(
+        //    "Executing with speed %6.2f\t", desired_speed);
     }
 
     float steering_out, desired_mainsail, desired_wingsail;
@@ -29,10 +29,12 @@ void ModeAcro::update()
     float desired_fore_flap, desired_mizzen_flap;
 
     // handle Ladon Robotics sailboats
-    float cos_in, sin_in;
+    float cos_in, sin_in, angle_in;
     get_pilot_desired_roll_and_pitch(sin_in, cos_in);
+    angle_in = rover.g2.sailboat.calc_point_of_sail_heading_rad(cos_in, sin_in);
+    mavlink_msg_named_value_int_send(MAVLINK_COMM_1, AP_HAL::millis(), "SailHeading", degrees(angle_in));
     rover.g2.sailboat.get_point_of_sail_steering(
-        rover.g2.sailboat.calc_point_of_sail_heading_rad(cos_in, sin_in),
+	angle_in,
         steering_out,
         attitude_control
     );
@@ -75,9 +77,9 @@ void ModeAcro::update()
     //             rover.G_Dt);
     // }
 
-    hal.console->printf("Sin: %6.2f\tCos: %6.2f\t", sin_in, cos_in);
-    hal.console->printf("Steering Out: %6.2f\t", steering_out);
-    hal.console->printf("\n===========================\n");
+    //hal.console->printf("Sin: %6.2f\tCos: %6.2f\t", sin_in, cos_in);
+    //hal.console->printf("Steering Out: %6.2f\t", steering_out);
+    //hal.console->printf("\n===========================\n");
     g2.motors.set_steering(steering_out * 4500.0f);
     g2.motors.set_sail_differential(desired_differential);
     g2.motors.set_mainsail(desired_mainsail);
