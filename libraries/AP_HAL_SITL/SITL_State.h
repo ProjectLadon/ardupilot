@@ -44,6 +44,7 @@
 #include <SITL/SIM_RF_MAVLink.h>
 #include <SITL/SIM_RF_GYUS42v2.h>
 #include <SITL/SIM_VectorNav.h>
+#include <SITL/SIM_LORD.h>
 #include <SITL/SIM_AIS.h>
 
 #include <SITL/SIM_Frsky_D.h>
@@ -163,9 +164,6 @@ private:
     void _gps_write(const uint8_t *p, uint16_t size, uint8_t instance);
     void _gps_send_ubx(uint8_t msgid, uint8_t *buf, uint16_t size, uint8_t instance);
     void _update_gps_ubx(const struct gps_data *d, uint8_t instance);
-    void _update_gps_mtk(const struct gps_data *d, uint8_t instance);
-    void _update_gps_mtk16(const struct gps_data *d, uint8_t instance);
-    void _update_gps_mtk19(const struct gps_data *d, uint8_t instance);
     uint8_t _gps_nmea_checksum(const char *s);
     void _gps_nmea_printf(uint8_t instance, const char *fmt, ...);
     void _update_gps_nmea(const struct gps_data *d, uint8_t instance);
@@ -194,7 +192,6 @@ private:
 
     // internal state
     enum vehicle_type _vehicle;
-    uint16_t _framerate;
     uint8_t _instance;
     uint16_t _base_port;
     pid_t _parent_pid;
@@ -314,11 +311,17 @@ private:
     // simulated VectorNav system:
     SITL::VectorNav *vectornav;
 
+    // simulated LORD Microstrain system
+    SITL::LORD *lord;
+
     // Ride along instances via JSON SITL backend
     SITL::JSON_Master ride_along;
 
     // simulated AIS stream
     SITL::AIS *ais;
+
+    // simulated EFI MegaSquirt device:
+    SITL::EFI_MegaSquirt *efi_ms;
 
     // output socket for flightgear viewing
     SocketAPM fg_socket{true};

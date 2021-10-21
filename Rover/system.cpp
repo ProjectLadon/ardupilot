@@ -130,6 +130,8 @@ void Rover::init_ardupilot()
     set_mode(*initial_mode, ModeReason::INITIALISED);
 
     // initialise rc channels
+    rc().convert_options(RC_Channel::AUX_FUNC::ARMDISARM_UNUSED, RC_Channel::AUX_FUNC::ARMDISARM);
+    rc().convert_options(RC_Channel::AUX_FUNC::SAVE_TRIM, RC_Channel::AUX_FUNC::TRIM_TO_CURRENT_SERVO_RC);
     rc().init();
 
     rover.g2.sailboat.init();
@@ -144,13 +146,6 @@ void Rover::init_ardupilot()
 void Rover::startup_ground(void)
 {
     set_mode(mode_initializing, ModeReason::INITIALISED);
-
-    gcs().send_text(MAV_SEVERITY_INFO, "<startup_ground> Ground start");
-
-    #if(GROUND_START_DELAY > 0)
-        gcs().send_text(MAV_SEVERITY_NOTICE, "<startup_ground> With delay");
-        hal.scheduler->delay(GROUND_START_DELAY * 1000);
-    #endif
 
     // IMU ground start
     //------------------------

@@ -1,6 +1,8 @@
 #include "mode.h"
 #include "Plane.h"
 
+#if HAL_QUADPLANE_ENABLED
+
 bool ModeQRTL::_enter()
 {
     // use do_RTL() to setup next_WP_loc
@@ -39,9 +41,12 @@ void ModeQRTL::update()
 void ModeQRTL::run()
 {
     quadplane.vtol_position_controller();
-    if (poscontrol.get_state() >= QuadPlane::QPOS_POSITION2) {
+    if (poscontrol.get_state() > QuadPlane::QPOS_POSITION2) {
         // change target altitude to home alt
         plane.next_WP_loc.alt = plane.home.alt;
+    }
+    if (poscontrol.get_state() >= QuadPlane::QPOS_POSITION2) {
+        // start landing logic
         quadplane.verify_vtol_land();
     }
 }
@@ -78,3 +83,4 @@ bool ModeQRTL::update_target_altitude()
     return true;
 }
 
+#endif

@@ -52,7 +52,7 @@
   #include <AP_PiccoloCAN/AP_PiccoloCAN.h>
 
   // To be replaced with macro saying if KDECAN library is included
-  #if APM_BUILD_TYPE(APM_BUILD_ArduCopter) || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
+  #if APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
     #include <AP_KDECAN/AP_KDECAN.h>
   #endif
   #include <AP_UAVCAN/AP_UAVCAN.h>
@@ -390,22 +390,22 @@ bool AP_Arming::ins_checks(bool report)
             check_failed(ARMING_CHECK_INS, report, "%s", failure_msg);
             return false;
         }
+    }
 
 #if HAL_GYROFFT_ENABLED
-        // gyros are healthy so check the FFT
-        if ((checks_to_perform & ARMING_CHECK_ALL) ||
-            (checks_to_perform & ARMING_CHECK_FFT)) {
-            // Check that the noise analyser works
-            AP_GyroFFT *fft = AP::fft();
+    // gyros are healthy so check the FFT
+    if ((checks_to_perform & ARMING_CHECK_ALL) ||
+        (checks_to_perform & ARMING_CHECK_FFT)) {
+        // Check that the noise analyser works
+        AP_GyroFFT *fft = AP::fft();
 
-            char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
-            if (fft != nullptr && !fft->pre_arm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
-                check_failed(ARMING_CHECK_INS, report, "%s", fail_msg);
-                return false;
-            }
+        char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
+        if (fft != nullptr && !fft->pre_arm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
+            check_failed(ARMING_CHECK_INS, report, "%s", fail_msg);
+            return false;
         }
-#endif
     }
+#endif
 
     return true;
 }
@@ -441,7 +441,7 @@ bool AP_Arming::compass_checks(bool report)
             return false;
         }
         // check compass learning is on or offsets have been set
-#if !APM_BUILD_TYPE(APM_BUILD_ArduCopter) && !APM_BUILD_TYPE(APM_BUILD_Blimp)
+#if !APM_BUILD_COPTER_OR_HELI() && !APM_BUILD_TYPE(APM_BUILD_Blimp)
         // check compass offsets have been set if learning is off
         // copter and blimp always require configured compasses
         if (!_compass.learn_offsets_enabled())
@@ -841,6 +841,26 @@ bool AP_Arming::board_voltage_checks(bool report)
     return true;
 }
 
+#if HAL_HAVE_IMU_HEATER
+bool AP_Arming::heater_min_temperature_checks(bool report)
+{
+    if (checks_to_perform & ARMING_CHECK_ALL) {
+        AP_BoardConfig *board = AP::boardConfig();
+        if (board) {
+            float temperature;
+            int8_t min_temperature;
+            if (board->get_board_heater_temperature(temperature) &&
+                board->get_board_heater_arming_temperature(min_temperature) &&
+                (temperature < min_temperature)) {
+                check_failed(ARMING_CHECK_SYSTEM, report, "heater temp low (%0.1f < %i)", temperature, min_temperature);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+#endif // HAL_HAVE_IMU_HEATER
+
 /*
   check base system operations
  */
@@ -947,7 +967,7 @@ bool AP_Arming::can_checks(bool report)
             switch (AP::can().get_driver_type(i)) {
                 case AP_CANManager::Driver_Type_KDECAN: {
 // To be replaced with macro saying if KDECAN library is included
-#if APM_BUILD_TYPE(APM_BUILD_ArduCopter) || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
+#if APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
                     AP_KDECAN *ap_kdecan = AP_KDECAN::get_kdecan(i);
                     if (ap_kdecan != nullptr && !ap_kdecan->pre_arm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
                         check_failed(ARMING_CHECK_SYSTEM, report, "KDECAN: %s", fail_msg);
@@ -1206,7 +1226,7 @@ bool AP_Arming::aux_auth_checks(bool display_failure)
 
 bool AP_Arming::generator_checks(bool display_failure) const
 {
-#if GENERATOR_ENABLED
+#if HAL_GENERATOR_ENABLED
     const AP_Generator *generator = AP::generator();
     if (generator == nullptr) {
         return true;
@@ -1222,7 +1242,7 @@ bool AP_Arming::generator_checks(bool display_failure) const
 
 bool AP_Arming::pre_arm_checks(bool report)
 {
-#if !APM_BUILD_TYPE(APM_BUILD_ArduCopter)
+#if !APM_BUILD_COPTER_OR_HELI()
     if (armed || require == (uint8_t)Required::NO) {
         // if we are already armed or don't need any arming checks
         // then skip the checks
@@ -1231,6 +1251,9 @@ bool AP_Arming::pre_arm_checks(bool report)
 #endif
 
     return hardware_safety_check(report)
+#if HAL_HAVE_IMU_HEATER
+        &  heater_min_temperature_checks(report)
+#endif
         &  barometer_checks(report)
         &  ins_checks(report)
         &  compass_checks(report)
@@ -1337,7 +1360,7 @@ bool AP_Arming::disarm(const AP_Arming::Method method, bool do_disarm_checks)
     armed = false;
     _last_disarm_method = method;
 
-    Log_Write_Disarm(method); // should be able to pass through force here?
+    Log_Write_Disarm(!do_disarm_checks, method);  // Log_Write_Disarm takes "force"
 
     check_forced_logging(method);
 
@@ -1466,14 +1489,14 @@ void AP_Arming::Log_Write_Arm(const bool forced, const AP_Arming::Method method)
     AP::logger().Write_Event(LogEvent::ARMED);
 }
 
-void AP_Arming::Log_Write_Disarm(const AP_Arming::Method method)
+void AP_Arming::Log_Write_Disarm(const bool forced, const AP_Arming::Method method)
 {
     const struct log_Arm_Disarm pkt {
         LOG_PACKET_HEADER_INIT(LOG_ARM_DISARM_MSG),
         time_us                 : AP_HAL::micros64(),
         arm_state               : is_armed(),
         arm_checks              : 0,
-        forced                  : 0,
+        forced                  : forced,
         method                  : (uint8_t)method
     };
     AP::logger().WriteCriticalBlock(&pkt, sizeof(pkt));

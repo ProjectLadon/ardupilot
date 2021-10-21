@@ -50,6 +50,9 @@ bool ModeAuto::init(bool ignore_checks)
         // clear guided limits
         copter.mode_guided.limit_clear();
 
+        // reset flag indicating if pilot has applied roll or pitch inputs during landing
+        copter.ap.land_repo_active = false;
+
 #if PRECISION_LANDING == ENABLED
         // initialise precland state machine
         copter.precland_statemachine.init();
@@ -858,7 +861,7 @@ void ModeAuto::wp_run()
     float target_yaw_rate = 0;
     if (!copter.failsafe.radio && use_pilot_yaw()) {
         // get pilot's desired yaw rate
-        target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->get_control_in());
+        target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->norm_input_dz());
         if (!is_zero(target_yaw_rate)) {
             auto_yaw.set_mode(AUTO_YAW_HOLD);
         }
@@ -927,7 +930,7 @@ void ModeAuto::circle_run()
     float target_yaw_rate = 0;
     if (!copter.failsafe.radio && use_pilot_yaw()) {
         // get pilot's desired yaw rate
-        target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->get_control_in());
+        target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->norm_input_dz());
         if (!is_zero(target_yaw_rate)) {
             auto_yaw.set_mode(AUTO_YAW_HOLD);
         }
@@ -973,7 +976,7 @@ void ModeAuto::loiter_run()
     // accept pilot input of yaw
     float target_yaw_rate = 0;
     if (!copter.failsafe.radio && use_pilot_yaw()) {
-        target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->get_control_in());
+        target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->norm_input_dz());
     }
 
     // set motors to full range
@@ -1658,7 +1661,7 @@ bool ModeAuto::verify_land()
         case State::Descending:
             // rely on THROTTLE_LAND mode to correctly update landing status
             retval = copter.ap.land_complete && (motors->get_spool_state() == AP_Motors::SpoolState::GROUND_IDLE);
-            if (retval && !mission.continue_after_land() && copter.motors->armed()) {
+            if (retval && !mission.continue_after_land_check_for_takeoff() && copter.motors->armed()) {
                 /*
                   we want to stop mission processing on land
                   completion. Disarm now, then return false. This

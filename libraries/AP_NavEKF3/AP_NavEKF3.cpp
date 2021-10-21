@@ -15,7 +15,7 @@
   APM_BUILD_DIRECTORY is taken from the main vehicle directory name
   where the code is built.
  */
-#if APM_BUILD_TYPE(APM_BUILD_ArduCopter) || APM_BUILD_TYPE(APM_BUILD_Replay)
+#if APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_Replay)
 // copter defaults
 #define VELNE_M_NSE_DEFAULT     0.3f
 #define VELD_M_NSE_DEFAULT      0.5f
@@ -120,6 +120,10 @@
 #define WIND_P_NSE_DEFAULT      0.1
 
 #endif // APM_BUILD_DIRECTORY
+
+#ifndef EK3_PRIMARY_DEFAULT
+#define EK3_PRIMARY_DEFAULT 0
+#endif
 
 // Define tuning parameters
 const AP_Param::GroupInfo NavEKF3::var_info[] = {
@@ -709,7 +713,7 @@ const AP_Param::GroupInfo NavEKF3::var_info2[] = {
     // @Range: 0 2
     // @Increment: 1
     // @User: Advanced
-    AP_GROUPINFO("PRIMARY", 8, NavEKF3, _primary_core, 0),
+    AP_GROUPINFO("PRIMARY", 8, NavEKF3, _primary_core, EK3_PRIMARY_DEFAULT),
     
     AP_GROUPEND
 };

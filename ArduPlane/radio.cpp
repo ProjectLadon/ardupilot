@@ -44,10 +44,16 @@ void Plane::set_control_channels(void)
     channel_flap     = rc().find_channel_for_option(RC_Channel::AUX_FUNC::FLAP);
     channel_airbrake = rc().find_channel_for_option(RC_Channel::AUX_FUNC::AIRBRAKE);
 
+#if HAL_QUADPLANE_ENABLED
     // update manual forward throttle channel assignment
     quadplane.rc_fwd_thr_ch = rc().find_channel_for_option(RC_Channel::AUX_FUNC::FWD_THR);
+#endif
 
-    if (!quadplane.enable) {
+    bool set_throttle_esc_scaling = true;
+#if HAL_QUADPLANE_ENABLED
+    set_throttle_esc_scaling = !quadplane.enable;
+#endif
+    if (set_throttle_esc_scaling) {
         // setup correct scaling for ESCs like the UAVCAN ESCs which
         // take a proportion of speed. For quadplanes we use AP_Motors
         // scaling
@@ -188,8 +194,10 @@ void Plane::read_radio()
 
     rudder_arm_disarm_check();
 
+#if HAL_QUADPLANE_ENABLED
     // potentially swap inputs for tailsitters
     quadplane.tailsitter.check_input();
+#endif
 
     // check for transmitter tuning changes
     tuning.check_input(control_mode->mode_number());
@@ -236,19 +244,23 @@ void Plane::control_failsafe()
         throttle_nudge = 0;
 
         switch (control_mode->mode_number()) {
+#if HAL_QUADPLANE_ENABLED
             case Mode::Number::QSTABILIZE:
             case Mode::Number::QHOVER:
             case Mode::Number::QLOITER:
             case Mode::Number::QLAND: // throttle is ignored, but reset anyways
             case Mode::Number::QRTL:  // throttle is ignored, but reset anyways
             case Mode::Number::QACRO:
+#if QAUTOTUNE_ENABLED
             case Mode::Number::QAUTOTUNE:
+#endif
                 if (quadplane.available() && quadplane.motors->get_desired_spool_state() > AP_Motors::DesiredSpoolState::GROUND_IDLE) {
                     // set half throttle to avoid descending at maximum rate, still has a slight descent due to throttle deadzone
                     channel_throttle->set_control_in(channel_throttle->get_range() / 2);
                     break;
                 }
                 FALLTHROUGH;
+#endif
             default:
                 channel_throttle->set_control_in(0);
                 break;
@@ -287,24 +299,32 @@ void Plane::control_failsafe()
     }
 }
 
-bool Plane::trim_radio()
+void Plane::trim_radio()
 {
     if (failsafe.rc_failsafe) {
         // can't trim if we don't have valid input
-        return false;
+        return;
     }
 
-    int16_t trim_roll_range = (channel_roll->get_radio_max() - channel_roll->get_radio_min())/5;
-    int16_t trim_pitch_range = (channel_pitch->get_radio_max() - channel_pitch->get_radio_min())/5;
-    if (channel_roll->get_radio_in() < channel_roll->get_radio_min()+trim_roll_range ||
-        channel_roll->get_radio_in() > channel_roll->get_radio_max()-trim_roll_range ||
-        channel_pitch->get_radio_in() < channel_pitch->get_radio_min()+trim_pitch_range ||
-        channel_pitch->get_radio_in() > channel_pitch->get_radio_max()-trim_pitch_range) {
-        // don't trim for extreme values - if we attempt to trim so
-        // there is less than 20 percent range left then assume the
+    if (plane.control_mode != &mode_manual) {
+        gcs().send_text(MAV_SEVERITY_ERROR, "trim failed, not in manual mode");
+        return;
+    }
+
+    if (labs(channel_roll->get_control_in()) > (channel_roll->get_range() * 0.2) ||
+            labs(channel_pitch->get_control_in()) > (channel_pitch->get_range() * 0.2)) {
+        // don't trim for extreme values - if we attempt to trim
+        // more than 20 percent range left then assume the
         // sticks are not properly centered. This also prevents
         // problems with starting APM with the TX off
-        return false;
+        gcs().send_text(MAV_SEVERITY_ERROR, "trim failed, large roll and pitch input");
+        return;
+    }
+
+    if (degrees(ahrs.get_gyro().length()) > 30.0) {
+        // rotating more than 30 deg/second
+        gcs().send_text(MAV_SEVERITY_ERROR, "trim failed, large movement");
+        return;
     }
 
     // trim main surfaces
@@ -320,7 +340,7 @@ bool Plane::trim_radio()
     SRV_Channels::set_trim_to_servo_out_for(SRV_Channel::k_vtail_left);
     SRV_Channels::set_trim_to_servo_out_for(SRV_Channel::k_vtail_right);
     
-    if (SRV_Channels::get_output_scaled(SRV_Channel::k_rudder) == 0) {
+    if (is_zero(SRV_Channels::get_output_scaled(SRV_Channel::k_rudder))) {
         // trim differential spoilers if no rudder input
         SRV_Channels::set_trim_to_servo_out_for(SRV_Channel::k_dspoilerLeft1);
         SRV_Channels::set_trim_to_servo_out_for(SRV_Channel::k_dspoilerLeft2);
@@ -328,8 +348,8 @@ bool Plane::trim_radio()
         SRV_Channels::set_trim_to_servo_out_for(SRV_Channel::k_dspoilerRight2);
     }
 
-    if (SRV_Channels::get_output_scaled(SRV_Channel::k_flap_auto) == 0 &&
-        SRV_Channels::get_output_scaled(SRV_Channel::k_flap) == 0) {
+    if (is_zero(SRV_Channels::get_output_scaled(SRV_Channel::k_flap_auto)) &&
+        is_zero(SRV_Channels::get_output_scaled(SRV_Channel::k_flap))) {
         // trim flaperons if no flap input
         SRV_Channels::set_trim_to_servo_out_for(SRV_Channel::k_flaperon_left);
         SRV_Channels::set_trim_to_servo_out_for(SRV_Channel::k_flaperon_right);
@@ -340,7 +360,7 @@ bool Plane::trim_radio()
     channel_pitch->set_and_save_trim();
     channel_rudder->set_and_save_trim();
 
-    return true;
+    gcs().send_text(MAV_SEVERITY_NOTICE, "trim complete");
 }
 
 /*

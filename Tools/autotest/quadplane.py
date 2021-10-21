@@ -112,16 +112,12 @@ class AutoTestQuadPlane(AutoTest):
             raise PreconditionFailedException("FLTMODE_CH not %d" % default_fltmode_ch)
 
         """When disarmed, motor PWM will drop to min_pwm"""
-        min_pwm = self.get_parameter("Q_THR_MIN_PWM")
+        min_pwm = self.get_parameter("Q_M_PWM_MIN")
 
         self.progress("Verify Motor1 is at min_pwm when disarmed")
         self.wait_servo_channel_value(5, min_pwm, comparator=operator.eq)
 
-        """set Q_OPTIONS bit AIRMODE"""
-        airmode_option_bit = (1 << 9)
-        self.set_parameter("Q_OPTIONS", airmode_option_bit)
-
-        armdisarm_option = 41
+        armdisarm_option = 154
         arm_ch = 8
         self.set_parameter("RC%d_OPTION" % arm_ch, armdisarm_option)
         self.progress("Configured RC%d as ARMDISARM switch" % arm_ch)
@@ -147,7 +143,7 @@ class AutoTestQuadPlane(AutoTest):
         if (spin_arm_pwm >= spin_min_pwm):
             raise PreconditionFailedException("SPIN_MIN pwm not greater than SPIN_ARM pwm")
 
-        self.start_subtest("Test auxswitch arming with Q_OPTIONS=AirMode")
+        self.start_subtest("Test auxswitch arming with AirMode Switch")
         for mode in ('QSTABILIZE', 'QACRO'):
             """verify that arming with switch results in higher PWM output"""
             self.progress("Testing %s mode" % mode)
@@ -626,7 +622,7 @@ class AutoTestQuadPlane(AutoTest):
         # disable stall prevention so roll angle is not limited
         self.set_parameter("STALL_PREVENTION", 0)
 
-        thr_min_pwm = self.get_parameter("Q_THR_MIN_PWM")
+        thr_min_pwm = self.get_parameter("Q_M_PWM_MIN")
         lim_roll_deg = self.get_parameter("LIM_ROLL_CD") * 0.01
         self.progress("Waiting for motors to stop (transition completion)")
         self.wait_servo_channel_value(5,

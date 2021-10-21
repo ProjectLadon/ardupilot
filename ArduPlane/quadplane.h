@@ -1,9 +1,17 @@
 #pragma once
 
+#include <AP_HAL/AP_HAL_Boards.h>
+
+#ifndef HAL_QUADPLANE_ENABLED
+#define HAL_QUADPLANE_ENABLED 1
+#endif
+
+#if HAL_QUADPLANE_ENABLED
+
 #include <AP_Motors/AP_Motors.h>
 #include <AC_PID/AC_PID.h>
 #include <AC_AttitudeControl/AC_AttitudeControl_Multi.h> // Attitude control library
-#include <AP_InertialNav/AP_InertialNav_NavEKF.h>
+#include <AP_InertialNav/AP_InertialNav.h>
 #include <AC_AttitudeControl/AC_PosControl.h>
 #include <AC_WPNav/AC_WPNav.h>
 #include <AC_WPNav/AC_Loiter.h>
@@ -13,6 +21,7 @@
 #include "qautotune.h"
 #include "defines.h"
 #include "tailsitter.h"
+#include "tiltrotor.h"
 
 /*
   QuadPlane specific functionality
@@ -29,6 +38,7 @@ public:
     friend class RC_Channel_Plane;
     friend class RC_Channel;
     friend class Tailsitter;
+    friend class Tiltrotor;
 
     friend class Mode;
     friend class ModeAuto;
@@ -42,6 +52,7 @@ public:
     friend class ModeQStabilize;
     friend class ModeQAutotune;
     friend class ModeQAcro;
+    friend class ModeLoiterAltQLand;
     
     QuadPlane(AP_AHRS &_ahrs);
 
@@ -106,7 +117,7 @@ public:
     }
 
     // return desired forward throttle percentage
-    int8_t forward_throttle_pct();
+    float forward_throttle_pct();
     float get_weathervane_yaw_rate_cds(void);
 
     // see if we are flying from vtol point of view
@@ -157,7 +168,7 @@ private:
     AP_AHRS &ahrs;
     AP_Vehicle::MultiCopter aparm;
 
-    AP_InertialNav_NavEKF inertial_nav{ahrs};
+    AP_InertialNav inertial_nav{ahrs};
 
     AP_Enum<AP_Motors::motor_frame_class> frame_class;
     AP_Enum<AP_Motors::motor_frame_type> frame_type;
@@ -223,10 +234,6 @@ private:
     // use multicopter rate controller
     void multicopter_attitude_rate_update(float yaw_rate_cds);
 
-    // update yaw target for tiltrotor transition
-    void update_yaw_target();
-
-    void check_attitude_relax(void);
     float get_pilot_throttle(void);
     void control_hover(void);
     void relax_attitude_control();
@@ -243,6 +250,7 @@ private:
     bool should_relax(void);
     void motors_output(bool run_rate_controller = true);
     void Log_Write_QControl_Tuning();
+    void log_QPOS(void);
     float landing_descent_rate_cms(float height_above_ground);
     
     // setup correct aux channels for frame class
@@ -277,10 +285,6 @@ private:
     AP_Float fw_land_approach_radius;
 
     AP_Int16 rc_speed;
-
-    // min and max PWM for throttle
-    AP_Int16 thr_min_pwm;
-    AP_Int16 thr_max_pwm;
 
     // speed below which quad assistance is given
     AP_Float assist_speed;
@@ -352,7 +356,7 @@ private:
         AP_Float gain;
         float integrator;
         uint32_t last_ms;
-        int8_t last_pct;
+        float last_pct;
     } vel_forward;
 
     struct {
@@ -462,31 +466,8 @@ private:
     // time of last QTUN log message
     uint32_t last_qtun_log_ms;
 
-    // types of tilt mechanisms
-    enum {TILT_TYPE_CONTINUOUS    =0,
-          TILT_TYPE_BINARY        =1,
-          TILT_TYPE_VECTORED_YAW  =2,
-          TILT_TYPE_BICOPTER      =3
-    };
-
-    // tiltrotor control variables
-    struct {
-        AP_Int16 tilt_mask;
-        AP_Int16 max_rate_up_dps;
-        AP_Int16 max_rate_down_dps;
-        AP_Int8  max_angle_deg;
-        AP_Int8  tilt_type;
-        AP_Float tilt_yaw_angle;
-        AP_Float fixed_angle;
-        AP_Float fixed_gain;
-        float current_tilt;
-        float current_throttle;
-        bool motors_active:1;
-        float transition_yaw_cd;
-        uint32_t transition_yaw_set_ms;
-        bool is_vectored;
-    } tilt;
-
+    // Tiltrotor control
+    Tiltrotor tiltrotor{*this, motors};
 
     // tailsitter control
     Tailsitter tailsitter{*this, motors};
@@ -503,22 +484,9 @@ private:
 
     // time when we were last in a vtol control mode
     uint32_t last_vtol_mode_ms;
-    
-    void tiltrotor_slew(float tilt);
-    void tiltrotor_binary_slew(bool forward);
-    void tiltrotor_update(void);
-    void tiltrotor_continuous_update(void);
-    void tiltrotor_binary_update(void);
-    void tiltrotor_vectoring(void);
-    void tiltrotor_bicopter(void);
-    float tilt_throttle_scaling(void);
-    void tilt_compensate_angle(float *thrust, uint8_t num_motors, float non_tilted_mul, float tilted_mul);
-    void tilt_compensate(float *thrust, uint8_t num_motors);
-    bool is_motor_tilting(uint8_t motor) const {
-        return (((uint8_t)tilt.tilt_mask.get()) & (1U<<motor));
-    }
-    bool tiltrotor_fully_fwd(void) const;
-    float tilt_max_change(bool up) const;
+
+    // throttle scailing for vectored motors in FW flighy
+    float FW_vector_throttle_scaling(void);
 
     void afs_terminate(void);
     bool guided_mode_enabled(void);
@@ -538,7 +506,7 @@ private:
         OPTION_IDLE_GOV_MANUAL=(1<<6),
         OPTION_Q_ASSIST_FORCE_ENABLE=(1<<7),
         OPTION_TAILSIT_Q_ASSIST_MOTORS_ONLY=(1<<8),
-        OPTION_AIRMODE=(1<<9),
+        OPTION_AIRMODE_UNUSED=(1<<9),
         OPTION_DISARMED_TILT=(1<<10),
         OPTION_DELAY_ARMING=(1<<11),
         OPTION_DISABLE_SYNTHETIC_AIRSPEED_ASSIST=(1<<12),
@@ -651,3 +619,5 @@ private:
 
     static QuadPlane *_singleton;
 };
+
+#endif  // HAL_QUADPLANE_ENABLED

@@ -144,7 +144,7 @@ AP_PitchController::AP_PitchController(const AP_Vehicle::FixedWing &parms)
 /*
   AC_PID based rate controller
 */
-int32_t AP_PitchController::_get_rate_out(float desired_rate, float scaler, bool disable_integrator, float aspeed)
+float AP_PitchController::_get_rate_out(float desired_rate, float scaler, bool disable_integrator, float aspeed)
 {
     const float dt = AP::scheduler().get_loop_period_s();
 
@@ -209,7 +209,7 @@ int32_t AP_PitchController::_get_rate_out(float desired_rate, float scaler, bool
     }
     
     // output is scaled to notional centidegrees of deflection
-    return constrain_int32(out * 100, -4500, 4500);
+    return constrain_float(out * 100, -4500, 4500);
 }
 
 /*
@@ -222,7 +222,7 @@ int32_t AP_PitchController::_get_rate_out(float desired_rate, float scaler, bool
  4) minimum FBW airspeed (metres/sec)
  5) maximum FBW airspeed (metres/sec)
 */
-int32_t AP_PitchController::get_rate_out(float desired_rate, float scaler)
+float AP_PitchController::get_rate_out(float desired_rate, float scaler)
 {
     float aspeed;
 	if (!AP::ahrs().airspeed_estimate(aspeed)) {
@@ -282,7 +282,7 @@ float AP_PitchController::_get_coordination_rate_offset(float &aspeed, bool &inv
 // 4) minimum FBW airspeed (metres/sec)
 // 5) maximum FBW airspeed (metres/sec)
 //
-int32_t AP_PitchController::get_servo_out(int32_t angle_err, float scaler, bool disable_integrator)
+float AP_PitchController::get_servo_out(int32_t angle_err, float scaler, bool disable_integrator)
 {
 	// Calculate offset to pitch rate demand required to maintain pitch angle whilst banking
 	// Calculate ideal turn rate from bank angle and airspeed assuming a level coordinated turn
@@ -305,19 +305,16 @@ int32_t AP_PitchController::get_servo_out(int32_t angle_err, float scaler, bool 
 	// as the rates will be tuned when upright, and it is common that
 	// much higher rates are needed inverted	
 	if (!inverted) {
+        desired_rate += rate_offset;
         if (gains.rmax_neg && desired_rate < -gains.rmax_neg) {
             desired_rate = -gains.rmax_neg;
         } else if (gains.rmax_pos && desired_rate > gains.rmax_pos) {
             desired_rate = gains.rmax_pos;
 		}
+    } else {
+        // Make sure not to invert the turn coordination offset
+        desired_rate = -desired_rate + rate_offset;
 	}
-	
-	if (inverted) {
-		desired_rate = -desired_rate;
-	}
-
-	// Apply the turn correction offset
-	desired_rate = desired_rate + rate_offset;
 
     /*
       when we are past the users defined roll limit for the aircraft

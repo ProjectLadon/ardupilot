@@ -71,7 +71,7 @@ public:
     void       set_override(const uint16_t v, const uint32_t timestamp_ms);
     bool       has_override() const;
 
-    int16_t    stick_mixing(const int16_t servo_in);
+    float    stick_mixing(const float servo_in);
 
     // get control input with zero deadzone
     int16_t    get_control_in_zero_dz(void) const;
@@ -90,6 +90,9 @@ public:
 
     // set and save trim if changed
     void       set_and_save_radio_trim(int16_t val) { radio_trim.set_and_save_ifchanged(val);}
+
+    // check if any of the trim/min/max param are configured in storage, this would indicate that the user has done a calibration at somepoint
+    bool       configured_in_storage() { return radio_min.configured_in_storage() || radio_max.configured_in_storage() || radio_trim.configured_in_storage(); }
 
     ChannelType get_type(void) const { return type_in; }
 
@@ -138,7 +141,7 @@ public:
         AVOID_ADSB =          38, // enable AP_Avoidance library
         PRECISION_LOITER =    39, // enable precision loiter
         AVOID_PROXIMITY =     40, // enable object avoidance using proximity sensors (ie. horizontal lidar)
-        ARMDISARM =           41, // arm or disarm vehicle
+        ARMDISARM_UNUSED =    41, // UNUSED
         SMART_RTL =           42, // change to SmartRTL flight mode
         INVERTED  =           43, // enable inverted flight
         WINCH_ENABLE =        44, // winch enable/disable
@@ -218,6 +221,10 @@ public:
         CRUISE =             150,  ///CRUISE mode
         TURTLE =             151,  // Turtle mode - flip over after crash
         SIMPLE_HEADING_RESET = 152, // reset simple mode refernce heading to current
+        ARMDISARM =          153, // arm or disarm vehicle
+        ARMDISARM_AIRMODE =  154, // arm or disarm vehicle enabling airmode
+        TRIM_TO_CURRENT_SERVO_RC = 155, // trim to current servo and RC
+        TORQEEDO_CLEAR_ERR = 156, // clear torqeedo error
 
         // inputs from 200 will eventually used to replace RCMAP
         ROLL =               201, // roll input
@@ -295,7 +302,7 @@ protected:
     // virtual function to be overridden my subclasses
     virtual bool do_aux_function(aux_func_t ch_option, AuxSwitchPos);
 
-    virtual void do_aux_function_armdisarm(const AuxSwitchPos ch_flag);
+    void do_aux_function_armdisarm(const AuxSwitchPos ch_flag);
     void do_aux_function_avoid_adsb(const AuxSwitchPos ch_flag);
     void do_aux_function_avoid_proximity(const AuxSwitchPos ch_flag);
     void do_aux_function_camera_trigger(const AuxSwitchPos ch_flag);
@@ -428,6 +435,7 @@ public:
     class RC_Channel *find_channel_for_option(const RC_Channel::aux_func_t option);
     bool duplicate_options_exist();
     RC_Channel::AuxSwitchPos get_channel_pos(const uint8_t rcmapchan) const;
+    void convert_options(const RC_Channel::aux_func_t old_option, const RC_Channel::aux_func_t new_option);
 
     void init_aux_all();
     void read_aux_all();
@@ -481,7 +489,7 @@ public:
         return _options & uint32_t(Option::LOG_DATA);
     }
 
-    bool arming_check_throttle() const {
+    virtual bool arming_check_throttle() const {
         return _options & uint32_t(Option::ARMING_CHECK_THROTTLE);
     }
 
@@ -493,7 +501,9 @@ public:
         return get_singleton() != nullptr && (_options & uint32_t(Option::SUPPRESS_CRSF_MESSAGE));
     }
 
-
+    bool multiple_receiver_support() const {
+        return _options & uint32_t(Option::MULTI_RECEIVER_SUPPORT);
+    }
 
     // returns true if overrides should time out.  If true is returned
     // then returned_timeout_ms will contain the timeout in
@@ -553,6 +563,7 @@ protected:
         ALLOW_SWITCH_REV        = (1U << 7), // honor the reversed flag on switches
         CRSF_CUSTOM_TELEMETRY   = (1U << 8), // use passthrough data for crsf telemetry
         SUPPRESS_CRSF_MESSAGE   = (1U << 9), // suppress CRSF mode/rate message for ELRS systems
+        MULTI_RECEIVER_SUPPORT  = (1U << 10), // allow multiple receivers
     };
 
     void new_override_received() {

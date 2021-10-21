@@ -49,6 +49,7 @@
 #include <AP_OSD/AP_OSD.h>
 #include <AP_RCTelemetry/AP_CRSF_Telem.h>
 #include <AP_AIS/AP_AIS.h>
+#include <AP_Filesystem/AP_Filesystem.h>
 
 #include <stdio.h>
 
@@ -67,7 +68,7 @@
   #include <AP_Common/AP_Common.h>
 
   // To be replaced with macro saying if KDECAN library is included
-  #if APM_BUILD_TYPE(APM_BUILD_ArduCopter) || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
+  #if APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
     #include <AP_KDECAN/AP_KDECAN.h>
   #endif
   #include <AP_ToshibaCAN/AP_ToshibaCAN.h>
@@ -77,6 +78,8 @@
 
 #include <AP_BattMonitor/AP_BattMonitor.h>
 #include <AP_GPS/AP_GPS.h>
+
+#include <ctype.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -211,6 +214,12 @@ void GCS_MAVLINK::send_mcu_status(void)
 }
 #endif
 
+// returns the battery remaining percentage if valid, -1 otherwise
+int8_t GCS_MAVLINK::battery_remaining_pct(const uint8_t instance) const {
+    uint8_t percentage;
+    return AP::battery().capacity_remaining_pct(percentage, instance) ? MIN(percentage, INT8_MAX) : -1;
+}
+
 void GCS_MAVLINK::send_battery_status(const uint8_t instance) const
 {
     // catch the battery backend not supporting the required number of cells
@@ -256,6 +265,8 @@ void GCS_MAVLINK::send_battery_status(const uint8_t instance) const
     }
 
     float current, consumed_mah, consumed_wh;
+    const int8_t percentage = battery_remaining_pct(instance);
+    
     if (battery.current_amps(current, instance)) {
          current = constrain_float(current * 100,-INT16_MAX,INT16_MAX);
     } else {
@@ -269,8 +280,10 @@ void GCS_MAVLINK::send_battery_status(const uint8_t instance) const
     } else {
         consumed_wh = -1;
     }
-    uint8_t _percentage = -1;
-    const int8_t percentage = battery.capacity_remaining_pct(_percentage, instance) ? _percentage : -1;
+    uint32_t time_remaining;
+    if (!battery.time_remaining(time_remaining, instance)) {
+        time_remaining = 0;
+    }
 
     mavlink_msg_battery_status_send(chan,
                                     instance, // id
@@ -282,7 +295,7 @@ void GCS_MAVLINK::send_battery_status(const uint8_t instance) const
                                     consumed_mah, // total consumed current in milliampere.hour
                                     consumed_wh,  // consumed energy in hJ (hecto-Joules)
                                     percentage,
-                                    0, // time remaining, seconds (not provided)
+                                    time_remaining, // time remaining, seconds
                                     battery.get_mavlink_charge_state(instance), // battery charge state
                                     cell_volts_ext, // Cell 11..14 voltages
                                     0, // battery mode
@@ -873,6 +886,7 @@ ap_message GCS_MAVLINK::mavlink_id_to_ap_message_id(const uint32_t mavlink_id) c
         { MAVLINK_MSG_ID_EFI_STATUS,            MSG_EFI_STATUS},
         { MAVLINK_MSG_ID_GENERATOR_STATUS,      MSG_GENERATOR_STATUS},
         { MAVLINK_MSG_ID_WINCH_STATUS,          MSG_WINCH_STATUS},
+        { MAVLINK_MSG_ID_ESC_TELEMETRY_1_TO_4,  MSG_ESC_TELEMETRY},
         { MAVLINK_MSG_ID_WATER_DEPTH,           MSG_WATER_DEPTH},
         { MAVLINK_MSG_ID_HIGH_LATENCY2,         MSG_HIGH_LATENCY2},
         { MAVLINK_MSG_ID_AIS_VESSEL,            MSG_AIS_VESSEL},
@@ -1110,6 +1124,9 @@ void GCS_MAVLINK::update_send()
 
     if (!deferred_messages_initialised) {
         initialise_message_intervals_from_streamrates();
+#if HAL_MAVLINK_INTERVALS_FROM_FILES_ENABLED
+        initialise_message_intervals_from_config_files();
+#endif
         deferred_messages_initialised = true;
     }
 
@@ -1705,6 +1722,7 @@ void GCS_MAVLINK::send_rc_channels_raw() const
 
 void GCS_MAVLINK::send_raw_imu()
 {
+#if HAL_INS_ENABLED
     const AP_InertialSensor &ins = AP::ins();
     const Compass &compass = AP::compass();
 
@@ -1731,10 +1749,12 @@ void GCS_MAVLINK::send_raw_imu()
         mag.z,
         0,  // we use SCALED_IMU and SCALED_IMU2 for other IMUs
         int16_t(ins.get_temperature(0)*100));
+#endif
 }
 
 void GCS_MAVLINK::send_scaled_imu(uint8_t instance, void (*send_fn)(mavlink_channel_t chan, uint32_t time_ms, int16_t xacc, int16_t yacc, int16_t zacc, int16_t xgyro, int16_t ygyro, int16_t zgyro, int16_t xmag, int16_t ymag, int16_t zmag, int16_t temperature))
 {
+#if HAL_INS_ENABLED
     const AP_InertialSensor &ins = AP::ins();
     const Compass &compass = AP::compass();
 
@@ -1770,6 +1790,7 @@ void GCS_MAVLINK::send_scaled_imu(uint8_t instance, void (*send_fn)(mavlink_chan
         mag.y,
         mag.z,
         int16_t(ins.get_temperature(instance)*100));
+#endif
 }
 
 
@@ -2318,8 +2339,13 @@ void GCS_MAVLINK::send_autopilot_version() const
     char flight_custom_version[MAVLINK_MSG_AUTOPILOT_VERSION_FIELD_FLIGHT_CUSTOM_VERSION_LEN]{};
     char middleware_custom_version[MAVLINK_MSG_AUTOPILOT_VERSION_FIELD_MIDDLEWARE_CUSTOM_VERSION_LEN]{};
     char os_custom_version[MAVLINK_MSG_AUTOPILOT_VERSION_FIELD_OS_CUSTOM_VERSION_LEN]{};
+#ifdef HAL_USB_VENDOR_ID
+    const uint16_t vendor_id { HAL_USB_VENDOR_ID };
+    const uint16_t product_id { HAL_USB_PRODUCT_ID };
+#else
     uint16_t vendor_id = 0;
     uint16_t product_id = 0;
+#endif
     uint64_t uid = 0;
     uint8_t  uid2[MAVLINK_MSG_AUTOPILOT_VERSION_FIELD_UID2_LEN] = {0};
 
@@ -2394,6 +2420,7 @@ void GCS_MAVLINK::send_local_position() const
  */
 void GCS_MAVLINK::send_vibration() const
 {
+#if HAL_INS_ENABLED
     const AP_InertialSensor &ins = AP::ins();
 
     Vector3f vibration = ins.get_vibration_levels();
@@ -2407,6 +2434,7 @@ void GCS_MAVLINK::send_vibration() const
         ins.get_accel_clip_count(0),
         ins.get_accel_clip_count(1),
         ins.get_accel_clip_count(2));
+#endif
 }
 
 void GCS_MAVLINK::send_named_float(const char *name, float value) const
@@ -2534,8 +2562,7 @@ MAV_RESULT GCS::set_message_interval(uint8_t port_num, uint32_t msg_id, int32_t 
     uint8_t channel = get_channel_from_port_number(port_num);
 
     if ((channel < MAVLINK_COMM_NUM_BUFFERS) && (chan(channel) != nullptr)) {
-        chan(channel)->set_message_interval(msg_id, interval_us);
-        return MAV_RESULT_ACCEPTED;
+        return chan(channel)->set_message_interval(msg_id, interval_us);
     }
 
     return MAV_RESULT_FAILED;
@@ -2768,7 +2795,7 @@ MAV_RESULT GCS_MAVLINK::handle_preflight_reboot(const mavlink_command_long_t &pa
             StorageAccess param_storage{StorageManager::StorageParam};
             uint8_t zeros[40] {};
             param_storage.write_block(0, zeros, sizeof(zeros));
-            return MAV_RESULT_FAILED;
+            return MAV_RESULT_ACCEPTED;
         }
         if (is_equal(packet.param4, 97.0f)) {
             // create a really long loop
@@ -3018,6 +3045,9 @@ MAV_RESULT GCS_MAVLINK::handle_command_camera(const mavlink_command_long_t &pack
         break;
     case MAV_CMD_DO_SET_CAM_TRIGG_DIST:
         camera->set_trigger_distance(packet.param1);
+        if (is_equal(packet.param3, 1.0f)) {
+            camera->take_picture();
+        }
         result = MAV_RESULT_ACCEPTED;
         break;
     default:
@@ -3209,10 +3239,12 @@ void GCS_MAVLINK::handle_vision_speed_estimate(const mavlink_message_t &msg)
 
 void GCS_MAVLINK::handle_command_ack(const mavlink_message_t &msg)
 {
+#if HAL_INS_ENABLED
     AP_AccelCal *accelcal = AP::ins().get_acal();
     if (accelcal != nullptr) {
         accelcal->handleMessage(msg);
     }
+#endif
 }
 
 // allow override of RC channel values for complete GCS
@@ -3285,11 +3317,15 @@ void GCS_MAVLINK::handle_optical_flow(const mavlink_message_t &msg)
  */
 MAV_RESULT GCS_MAVLINK::handle_fixed_mag_cal_yaw(const mavlink_command_long_t &packet)
 {
+#if COMPASS_CAL_ENABLED
     Compass &compass = AP::compass();
     return compass.mag_cal_fixed_yaw(packet.param1,
                                      uint8_t(packet.param2),
                                      packet.param3,
                                      packet.param4);
+#else
+    return MAV_RESULT_UNSUPPORTED;
+#endif
 }
 
 void GCS_MAVLINK::handle_distance_sensor(const mavlink_message_t &msg)
@@ -3323,6 +3359,16 @@ void GCS_MAVLINK::handle_obstacle_distance_3d(const mavlink_message_t &msg)
     AP_Proximity *proximity = AP::proximity();
     if (proximity != nullptr) {
         proximity->handle_msg(msg);
+    }
+#endif
+}
+
+void GCS_MAVLINK::handle_adsb_message(const mavlink_message_t &msg)
+{
+#if HAL_ADSB_ENABLED
+    AP_ADSB *adsb = AP::ADSB();
+    if (adsb != nullptr) {
+        adsb->handle_message(chan, msg);
     }
 #endif
 }
@@ -3549,6 +3595,13 @@ void GCS_MAVLINK::handle_common_message(const mavlink_message_t &msg)
         handle_osd_param_config(msg);
         break;
 
+    case MAVLINK_MSG_ID_ADSB_VEHICLE:
+    case MAVLINK_MSG_ID_UAVIONIX_ADSB_OUT_CFG:
+    case MAVLINK_MSG_ID_UAVIONIX_ADSB_OUT_DYNAMIC:
+    case MAVLINK_MSG_ID_UAVIONIX_ADSB_TRANSCEIVER_HEALTH_REPORT:
+        handle_adsb_message(msg);
+        break;
+
     case MAVLINK_MSG_ID_LANDING_TARGET:
         handle_landing_target(msg);
         break;
@@ -3653,12 +3706,14 @@ void GCS_MAVLINK::send_banner()
         send_text(MAV_SEVERITY_INFO, "%s", banner_msg);
     }
 
+#if HAL_INS_ENABLED
     // output any fast sampling status messages
     for (uint8_t i = 0; i < INS_MAX_BACKENDS; i++) {
         if (AP::ins().get_output_banner(i, banner_msg, sizeof(banner_msg))) {
             send_text(MAV_SEVERITY_INFO, "%s", banner_msg);
         }
     }
+#endif
 }
 
 
@@ -3724,12 +3779,16 @@ MAV_RESULT GCS_MAVLINK::handle_command_preflight_set_sensor_offsets(const mavlin
 
 bool GCS_MAVLINK::calibrate_gyros()
 {
+#if HAL_INS_ENABLED
     AP::ins().init_gyro();
     if (!AP::ins().gyro_calibrated_ok_all()) {
         return false;
     }
     AP::ahrs().reset_gyro_drift();
     return true;
+#else
+    return false;
+#endif
 }
 
 MAV_RESULT GCS_MAVLINK::_handle_command_preflight_calibration_baro()
@@ -3749,6 +3808,8 @@ MAV_RESULT GCS_MAVLINK::_handle_command_preflight_calibration_baro()
 
 MAV_RESULT GCS_MAVLINK::_handle_command_preflight_calibration(const mavlink_command_long_t &packet)
 {
+    MAV_RESULT ret = MAV_RESULT_UNSUPPORTED;
+
     EXPECT_DELAY_MS(30000);
     if (is_equal(packet.param1,1.0f)) {
         if (!calibrate_gyros()) {
@@ -3761,6 +3822,7 @@ MAV_RESULT GCS_MAVLINK::_handle_command_preflight_calibration(const mavlink_comm
         return _handle_command_preflight_calibration_baro();
     }
 
+#if HAL_INS_ENABLED
     if (is_equal(packet.param5,1.0f)) {
         // start with gyro calibration
         if (!calibrate_gyros()) {
@@ -3776,12 +3838,12 @@ MAV_RESULT GCS_MAVLINK::_handle_command_preflight_calibration(const mavlink_comm
         if (!calibrate_gyros()) {
             return MAV_RESULT_FAILED;
         }
-        float trim_roll, trim_pitch;
-        if (!AP::ins().calibrate_trim(trim_roll, trim_pitch)) {
+        Vector3f trim_rad = AP::ahrs().get_trim();
+        if (!AP::ins().calibrate_trim(trim_rad)) {
             return MAV_RESULT_FAILED;
         }
         // reset ahrs's trim to suggested values from calibration routine
-        AP::ahrs().set_trim(Vector3f(trim_roll, trim_pitch, 0));
+        AP::ahrs().set_trim(trim_rad);
         return MAV_RESULT_ACCEPTED;
     }
 
@@ -3795,12 +3857,12 @@ MAV_RESULT GCS_MAVLINK::_handle_command_preflight_calibration(const mavlink_comm
       compass to be written as valid. This is useful when reloading
       parameters after a full parameter erase
      */
-    MAV_RESULT ret = MAV_RESULT_UNSUPPORTED;
     if (is_equal(packet.param5,76.0f)) {
         // force existing accel calibration to be accepted as valid
         AP::ins().force_save_calibration();
         ret = MAV_RESULT_ACCEPTED;
     }
+#endif
 
     if (is_equal(packet.param2,76.0f)) {
         // force existing compass calibration to be accepted as valid
@@ -3848,7 +3910,7 @@ MAV_RESULT GCS_MAVLINK::handle_command_preflight_can(const mavlink_command_long_
         switch (AP::can().get_driver_type(i)) {
             case AP_CANManager::Driver_Type_KDECAN: {
 // To be replaced with macro saying if KDECAN library is included
-#if APM_BUILD_TYPE(APM_BUILD_ArduCopter) || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
+#if APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
                 AP_KDECAN *ap_kdecan = AP_KDECAN::get_kdecan(i);
 
                 if (ap_kdecan != nullptr) {
@@ -3862,7 +3924,7 @@ MAV_RESULT GCS_MAVLINK::handle_command_preflight_can(const mavlink_command_long_
             }
             case AP_CANManager::Driver_Type_CANTester: {
 // To be replaced with macro saying if KDECAN library is included
-#if (APM_BUILD_TYPE(APM_BUILD_ArduCopter) || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)) && (HAL_MAX_CAN_PROTOCOL_DRIVERS > 1 && !HAL_MINIMIZE_FEATURES)
+#if (APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)) && (HAL_MAX_CAN_PROTOCOL_DRIVERS > 1 && !HAL_MINIMIZE_FEATURES)
                 CANTester *cantester = CANTester::get_cantester(i);
 
                 if (cantester != nullptr) {
@@ -3930,7 +3992,11 @@ MAV_RESULT GCS_MAVLINK::handle_command_battery_reset(const mavlink_command_long_
 
 MAV_RESULT GCS_MAVLINK::handle_command_mag_cal(const mavlink_command_long_t &packet)
 {
+#if COMPASS_CAL_ENABLED
     return AP::compass().handle_mag_cal_command(packet);
+#else
+    return MAV_RESULT_UNSUPPORTED;
+#endif
 }
 
 MAV_RESULT GCS_MAVLINK::handle_command_request_autopilot_capabilities(const mavlink_command_long_t &packet)
@@ -4050,11 +4116,15 @@ MAV_RESULT GCS_MAVLINK::handle_command_do_sprayer(const mavlink_command_long_t &
 
 MAV_RESULT GCS_MAVLINK::handle_command_accelcal_vehicle_pos(const mavlink_command_long_t &packet)
 {
+#if HAL_INS_ENABLED
     if (AP::ins().get_acal() == nullptr ||
         !AP::ins().get_acal()->gcs_vehicle_position(packet.param1)) {
         return MAV_RESULT_FAILED;
     }
     return MAV_RESULT_ACCEPTED;
+#else
+    return MAV_RESULT_UNSUPPORTED;
+#endif
 }
 
 MAV_RESULT GCS_MAVLINK::handle_command_mount(const mavlink_command_long_t &packet)
@@ -4642,10 +4712,9 @@ void GCS_MAVLINK::send_sys_status()
 
     const AP_BattMonitor &battery = AP::battery();
     float battery_current;
-    uint8_t battery_remaining = -1;
+    const int8_t battery_remaining = battery_remaining_pct(AP_BATT_PRIMARY_INSTANCE);
 
     if (battery.healthy() && battery.current_amps(battery_current)) {
-        IGNORE_RETURN(battery.capacity_remaining_pct(battery_remaining));
         battery_current = constrain_float(battery_current * 100,-INT16_MAX,INT16_MAX);
     } else {
         battery_current = -1;
@@ -4807,7 +4876,7 @@ void GCS_MAVLINK::send_set_position_target_global_int(uint8_t target_system, uin
 
 void GCS_MAVLINK::send_generator_status() const
 {
-#if GENERATOR_ENABLED
+#if HAL_GENERATOR_ENABLED
     AP_Generator *generator = AP::generator();
     if (generator == nullptr) {
         return;
@@ -4824,35 +4893,45 @@ void GCS_MAVLINK::send_water_depth() const
     }
 
     RangeFinder *rangefinder = RangeFinder::get_singleton();
-    if (rangefinder == nullptr || !rangefinder->has_data_orient(ROTATION_PITCH_270)) {
-        // no rangefinder or not facing downwards
-        return;
-    }
 
-    const bool sensor_healthy = (rangefinder->status_orient(ROTATION_PITCH_270) == RangeFinder::Status::Good);
+    if (rangefinder == nullptr || !rangefinder->has_orientation(ROTATION_PITCH_270)){
+        return;
+    } 
 
     // get position
     const AP_AHRS &ahrs = AP::ahrs();
     Location loc;
     IGNORE_RETURN(ahrs.get_position(loc));
 
-    // get temperature
-    float temp_C = 0.0f;
-    IGNORE_RETURN(rangefinder->get_temp(ROTATION_PITCH_270, temp_C));
+    for (uint8_t i=0; i<rangefinder->num_sensors(); i++) {
+        const AP_RangeFinder_Backend *s = rangefinder->get_backend(i);
+        
+        if (s == nullptr || s->orientation() != ROTATION_PITCH_270 || !s->has_data()) {
+            continue;
+        }
 
-    mavlink_msg_water_depth_send(
-        chan,
-        AP_HAL::millis(),   // time since system boot TODO: take time of measurement
-        0,                  // sensor id always zero
-        sensor_healthy,     // sensor healthy
-        loc.lat,            // latitude of vehicle
-        loc.lng,            // longitude of vehicle
-        loc.alt * 0.01f,    // altitude of vehicle (MSL)
-        ahrs.get_roll(),    // roll in radians
-        ahrs.get_pitch(),   // pitch in radians
-        ahrs.get_yaw(),     // yaw in radians
-        rangefinder->distance_cm_orient(ROTATION_PITCH_270) * 0.01f,    // distance in meters
-        temp_C);            // temperature in degC
+        // get temperature
+        float temp_C;
+        if (!s->get_temp(temp_C)) {
+            temp_C = 0.0f;
+        }
+
+        const bool sensor_healthy = (s->status() == RangeFinder::Status::Good);
+
+        mavlink_msg_water_depth_send(
+            chan,
+            AP_HAL::millis(),   // time since system boot TODO: take time of measurement
+            i,                  // rangefinder instance
+            sensor_healthy,     // sensor healthy
+            loc.lat,            // latitude of vehicle
+            loc.lng,            // longitude of vehicle
+            loc.alt * 0.01f,    // altitude of vehicle (MSL)
+            ahrs.get_roll(),    // roll in radians
+            ahrs.get_pitch(),   // pitch in radians
+            ahrs.get_yaw(),     // yaw in radians
+            s->distance_cm() * 0.01f,    // distance in meters
+            temp_C);            // temperature in degC
+    }
 #endif
 }
 
@@ -4921,12 +5000,14 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
         ret = try_send_mission_message(id);
         break;
 
+#if COMPASS_CAL_ENABLED
     case MSG_MAG_CAL_PROGRESS:
         ret = AP::compass().send_mag_cal_progress(*this);
         break;
     case MSG_MAG_CAL_REPORT:
         ret = AP::compass().send_mag_cal_report(*this);
         break;
+#endif
 
     case MSG_BATTERY_STATUS:
         send_battery_status();
@@ -5171,7 +5252,7 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
     case MSG_HIGH_LATENCY2:
 #if HAL_HIGH_LATENCY2_ENABLED
         CHECK_PAYLOAD_SIZE(HIGH_LATENCY2);
-        send_high_latency();
+        send_high_latency2();
 #endif // HAL_HIGH_LATENCY2_ENABLED
         break;
 
@@ -5221,6 +5302,182 @@ void GCS_MAVLINK::initialise_message_intervals_for_stream(GCS_MAVLINK::streams i
     }
 }
 
+#if HAL_MAVLINK_INTERVALS_FROM_FILES_ENABLED
+// open and read contents of path, setting message intervals from each
+// line
+DefaultIntervalsFromFiles::DefaultIntervalsFromFiles(uint16_t max_num)
+{
+    if (max_num == 0) {
+        return;
+    }
+    _intervals = new from_file_default_interval[max_num];
+    _max_intervals = max_num;
+}
+
+DefaultIntervalsFromFiles::~DefaultIntervalsFromFiles()
+{
+    delete[] (_intervals);
+}
+
+void DefaultIntervalsFromFiles::set(ap_message id, uint16_t interval)
+{
+    if (_intervals == nullptr) {
+        return;
+    }
+
+    // update any existing interval (last-one-in wins)
+    for (uint8_t i=0; i<_num_intervals; i++) {
+        if (_intervals[i].id == id) {
+            _intervals[i].interval = interval;
+            return;
+        }
+    }
+
+    // store an interval we've not seen before:
+    if (_num_intervals == _max_intervals) {
+        return;
+    }
+
+    _intervals[_num_intervals].id = id;
+    _intervals[_num_intervals].interval = interval;
+    _num_intervals++;
+}
+
+bool DefaultIntervalsFromFiles::get_interval_for_ap_message_id(ap_message id, uint16_t &interval) const
+{
+    for (uint16_t i=0; i<_num_intervals; i++) {
+        if (_intervals[i].id == id) {
+            interval = _intervals[i].interval;
+            return true;
+        }
+    }
+    return false;
+}
+
+ap_message DefaultIntervalsFromFiles::id_at(uint8_t ofs) const
+{
+    if (_intervals == nullptr || ofs >= _num_intervals) {
+        return MSG_LAST;
+    }
+    return _intervals[ofs].id;
+}
+
+uint16_t DefaultIntervalsFromFiles::interval_at(uint8_t ofs) const
+{
+    if (_intervals == nullptr || ofs >= _num_intervals) {
+        return -1;  // unsigned-integer wrap
+    }
+    return _intervals[ofs].interval;
+}
+
+void GCS_MAVLINK::get_intervals_from_filepath(const char *path, DefaultIntervalsFromFiles &intervals)
+{
+    const int f = AP::FS().open(path, O_RDONLY);
+    if (f == -1) {
+        return;
+    }
+
+    char line[20];
+    while (AP::FS().fgets(line, sizeof(line)-1, f)) {
+        char *saveptr = nullptr;
+        const char *mavlink_id_str = strtok_r(line, " ", &saveptr);
+        if (mavlink_id_str == nullptr || strlen(mavlink_id_str) == 0) {
+            continue;
+        }
+        const uint32_t mavlink_id = atoi(mavlink_id_str);
+
+        const ap_message msg_id = mavlink_id_to_ap_message_id(mavlink_id);
+        if (msg_id == MSG_LAST) {
+            continue;
+        }
+
+        const char *interval_str = strtok_r(nullptr, "\r\n", &saveptr);
+        if (interval_str == nullptr || strlen(interval_str) == 0) {
+            continue;
+        }
+        const uint16_t interval = atoi(interval_str);
+
+        intervals.set(msg_id, interval);
+    }
+
+    AP::FS().close(f);
+}
+
+void GCS_MAVLINK::initialise_message_intervals_from_config_files()
+{
+    static const char *path_templates[] {
+        "@ROMFS/message-intervals-chan%u.txt",
+        "message-intervals-chan%u.txt"
+    };
+
+    // don't do anything at all if no files exist:
+    bool exists = false;
+    for (const char * path_template : path_templates) {
+        struct stat stats;
+        char *path;
+        if (asprintf(&path, path_template, chan) == -1) {
+            continue;
+        }
+        if (AP::FS().stat(path, &stats) < 0) {
+            free(path);
+            continue;
+        }
+        free(path);
+        if (stats.st_size == 0) {
+            continue;
+        }
+        exists = true;
+        break;
+    }
+    if (!exists) {
+        return;
+    }
+
+    // first over-allocate:
+    DefaultIntervalsFromFiles *overallocated = new DefaultIntervalsFromFiles(128);
+    if (overallocated == nullptr) {
+        return;
+    }
+    for (const char * path_template : path_templates) {
+        char *path;
+        if (asprintf(&path, path_template, chan) == -1) {
+            continue;
+        }
+        get_intervals_from_filepath(path, *overallocated);
+        free(path);
+    }
+
+    // then allocate just the right number and redo all of the work:
+    const uint16_t num_required = overallocated->num_intervals();
+    delete overallocated;
+    overallocated = nullptr;
+
+    default_intervals_from_files = new DefaultIntervalsFromFiles(num_required);
+    if (default_intervals_from_files == nullptr) {
+        return;
+    }
+    for (const char * path_template : path_templates) {
+        char *path;
+        if (asprintf(&path, path_template, chan) == -1) {
+            continue;
+        }
+        get_intervals_from_filepath(path, *default_intervals_from_files);
+        free(path);
+    }
+
+    // now actually initialise the intervals:
+    for (uint8_t i=0; i<default_intervals_from_files->num_intervals(); i++) {
+        const ap_message id = default_intervals_from_files->id_at(i);
+        if (id == MSG_LAST) {
+            // internal error
+            break;
+        }
+        const uint16_t interval = default_intervals_from_files->interval_at(i);
+        set_ap_message_interval(id, interval);
+    }
+}
+#endif
+
 void GCS_MAVLINK::initialise_message_intervals_from_streamrates()
 {
     // this is O(n^2), but it's once at boot and across a 10-entry list...
@@ -5237,6 +5494,15 @@ bool GCS_MAVLINK::get_default_interval_for_ap_message(const ap_message id, uint1
         interval = 1000;
         return true;
     }
+
+#if HAL_MAVLINK_INTERVALS_FROM_FILES_ENABLED
+    // a user can specify default rates in files, which are read close
+    // to vehicle startup
+    if (default_intervals_from_files != nullptr &&
+        default_intervals_from_files->get_interval_for_ap_message_id(id, interval)) {
+        return true;
+    }
+#endif
 
     // find which stream this ap_message is in
     for (uint8_t i=0; all_stream_entries[i].ap_message_ids != nullptr; i++) {
@@ -5533,23 +5799,18 @@ GCS &gcs()
   send HIGH_LATENCY2 message
  */
 #if HAL_HIGH_LATENCY2_ENABLED
-void GCS_MAVLINK::send_high_latency() const
+void GCS_MAVLINK::send_high_latency2() const
 {
     AP_AHRS &ahrs = AP::ahrs();
-    struct Location global_position_current;
+    Location global_position_current;
     UNUSED_RESULT(ahrs.get_position(global_position_current));
 
-    Location cur = AP::gps().location();
-
     const AP_BattMonitor &battery = AP::battery();
-    float battery_current;
-    uint8_t battery_remaining = -1;
+    float battery_current = -1;
+    const int8_t battery_remaining = battery_remaining_pct(AP_BATT_PRIMARY_INSTANCE);
 
     if (battery.healthy() && battery.current_amps(battery_current)) {
-        IGNORE_RETURN(battery.capacity_remaining_pct(battery_remaining));
         battery_current = constrain_float(battery_current * 100,-INT16_MAX,INT16_MAX);
-    } else {
-        battery_current = -1;
     }
 
     AP_Mission *mission = AP::mission();
@@ -5561,52 +5822,30 @@ void GCS_MAVLINK::send_high_latency() const
     uint32_t present;
     uint32_t enabled;
     uint32_t health;
-    uint16_t failure_flags = 0;
     gcs().get_sensor_status_flags(present, enabled, health);
     // Remap HL_FAILURE_FLAG from system status flags
-    if (!(health & MAV_SYS_STATUS_SENSOR_GPS))
-    {
-        failure_flags |= HL_FAILURE_FLAG_GPS;
-    }
-    if (!(health & MAV_SYS_STATUS_SENSOR_DIFFERENTIAL_PRESSURE))
-    {
-        failure_flags |= HL_FAILURE_FLAG_DIFFERENTIAL_PRESSURE;
-    }    
-    if (!(health & MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE))
-    {
-        failure_flags |= HL_FAILURE_FLAG_ABSOLUTE_PRESSURE;
-    }    
-    if (!(health & MAV_SYS_STATUS_SENSOR_3D_ACCEL))
-    {
-        failure_flags |= HL_FAILURE_FLAG_3D_ACCEL;
-    }  
-    if (!(health & MAV_SYS_STATUS_SENSOR_3D_GYRO))
-    {
-        failure_flags |= HL_FAILURE_FLAG_3D_GYRO;
-    }  
-    if (!(health & MAV_SYS_STATUS_SENSOR_3D_MAG))
-    {
-        failure_flags |= HL_FAILURE_FLAG_3D_MAG;
-    }  
-    if (!(health & MAV_SYS_STATUS_TERRAIN))
-    {
-        failure_flags |= HL_FAILURE_FLAG_TERRAIN;
-    }  
-    if (!(health & MAV_SYS_STATUS_SENSOR_BATTERY))
-    {
-        failure_flags |= HL_FAILURE_FLAG_BATTERY;
-    }  
-    if (!(health & MAV_SYS_STATUS_SENSOR_RC_RECEIVER))
-    {
-        failure_flags |= HL_FAILURE_FLAG_RC_RECEIVER;
-    }  
-    if (!(health & MAV_SYS_STATUS_GEOFENCE))
-    {
-        failure_flags |= HL_FAILURE_FLAG_GEOFENCE;
-    } 
-    if (!(health & MAV_SYS_STATUS_AHRS))
-    {
-        failure_flags |= HL_FAILURE_FLAG_ESTIMATOR;
+    static const struct PACKED status_map_t {
+        MAV_SYS_STATUS_SENSOR sensor;
+        HL_FAILURE_FLAG failure_flag;
+    } status_map[] {
+        { MAV_SYS_STATUS_SENSOR_GPS, HL_FAILURE_FLAG_GPS },
+        { MAV_SYS_STATUS_SENSOR_DIFFERENTIAL_PRESSURE, HL_FAILURE_FLAG_DIFFERENTIAL_PRESSURE },
+        { MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE, HL_FAILURE_FLAG_ABSOLUTE_PRESSURE },
+        { MAV_SYS_STATUS_SENSOR_3D_ACCEL, HL_FAILURE_FLAG_3D_ACCEL },
+        { MAV_SYS_STATUS_SENSOR_3D_GYRO, HL_FAILURE_FLAG_3D_GYRO },
+        { MAV_SYS_STATUS_SENSOR_3D_MAG, HL_FAILURE_FLAG_3D_MAG },
+        { MAV_SYS_STATUS_TERRAIN, HL_FAILURE_FLAG_TERRAIN },
+        { MAV_SYS_STATUS_SENSOR_BATTERY, HL_FAILURE_FLAG_BATTERY },
+        { MAV_SYS_STATUS_SENSOR_RC_RECEIVER, HL_FAILURE_FLAG_RC_RECEIVER },
+        { MAV_SYS_STATUS_GEOFENCE, HL_FAILURE_FLAG_GEOFENCE },
+        { MAV_SYS_STATUS_AHRS, HL_FAILURE_FLAG_ESTIMATOR },
+    };
+
+    uint16_t failure_flags = 0;
+    for (auto &map_entry : status_map) {
+        if ((health & map_entry.sensor) == 0) {
+            failure_flags |= map_entry.failure_flag;
+        }
     }
 
     //send_text(MAV_SEVERITY_INFO, "Yaw: %u", (((uint16_t)ahrs.yaw_sensor / 100) % 360));
@@ -5616,8 +5855,8 @@ void GCS_MAVLINK::send_high_latency() const
         gcs().frame_type(), // Type of the MAV (quadrotor, helicopter, etc.)
         MAV_AUTOPILOT_ARDUPILOTMEGA, // Autopilot type / class. Use MAV_AUTOPILOT_INVALID for components that are not flight controllers.
         gcs().custom_mode(), // A bitfield for use for autopilot-specific flags (2 byte version).
-        cur.lat, // [degE7] Latitude
-        cur.lng, // [degE7] Longitude
+        global_position_current.lat, // [degE7] Latitude
+        global_position_current.lng, // [degE7] Longitude
         global_position_current.alt * 0.01f, // [m] Altitude above mean sea level
         high_latency_target_altitude(), // [m] Altitude setpoint
         (((uint16_t)ahrs.yaw_sensor / 100) % 360) / 2, // [deg/2] Heading

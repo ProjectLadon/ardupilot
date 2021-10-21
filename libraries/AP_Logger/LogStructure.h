@@ -506,59 +506,6 @@ struct PACKED log_RPM {
     float rpm2;
 };
 
-struct PACKED log_SbpLLH {
-    LOG_PACKET_HEADER;
-    uint64_t time_us;
-    uint32_t tow;
-    int32_t  lat;
-    int32_t  lon;
-    int32_t  alt;
-    uint8_t  n_sats;
-    uint8_t  flags;
-};
-
-struct PACKED log_SbpHealth {
-    LOG_PACKET_HEADER;
-    uint64_t time_us;
-    uint32_t crc_error_counter;
-    uint32_t last_injected_data_ms;
-    uint32_t last_iar_num_hypotheses;
-};
-
-struct PACKED log_SbpRAWH {
-    LOG_PACKET_HEADER;
-    uint64_t time_us;
-    uint16_t msg_type;
-    uint16_t sender_id;
-    uint8_t index;
-    uint8_t pages;
-    uint8_t msg_len;
-    uint8_t res;
-    uint8_t data[48];
-};
-
-struct PACKED log_SbpRAWM {
-    LOG_PACKET_HEADER;
-    uint64_t time_us;
-    uint16_t msg_type;
-    uint16_t sender_id;
-    uint8_t index;
-    uint8_t pages;
-    uint8_t msg_len;
-    uint8_t res;
-    uint8_t data[104];
-};
-
-struct PACKED log_SbpEvent {
-    LOG_PACKET_HEADER;
-    uint64_t time_us;
-    uint16_t wn;
-    uint32_t tow;
-    int32_t ns_residual;
-    uint8_t level;
-    uint8_t quality;
-};
-
 struct PACKED log_Rally {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -687,36 +634,57 @@ struct PACKED log_Winch {
     int8_t temp;
 };
 
-struct PACKED log_PSC {
+// position controller North axis logging
+struct PACKED log_PSCN {
     LOG_PACKET_HEADER;
     uint64_t time_us;
-    float pos_target_x;
-    float pos_target_Y;
-    float position_x;
-    float position_y;
-    float vel_target_x;
-    float vel_target_y;
-    float velocity_x;
-    float velocity_y;
-    float accel_target_x;
-    float accel_target_y;
-    float accel_x;
-    float accel_y;
+    float pos_target;
+    float pos;
+    float vel_desired;
+    float vel_target;
+    float vel;
+    float accel_desired;
+    float accel_target;
+    float accel;
 };
 
-// position controller z-axis logging
-struct PACKED log_PSCZ {
+// position controller East axis logging
+struct PACKED log_PSCE {
     LOG_PACKET_HEADER;
     uint64_t time_us;
-    float pos_target_z;
-    float pos_z;
-    float vel_desired_z;
-    float vel_target_z;
-    float vel_z;
-    float accel_desired_z;
-    float accel_target_z;
-    float accel_z;
-    float throttle_out;
+    float pos_target;
+    float pos;
+    float vel_desired;
+    float vel_target;
+    float vel;
+    float accel_desired;
+    float accel_target;
+    float accel;
+};
+
+// position controller Down axis logging
+struct PACKED log_PSCD {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    float pos_target;
+    float pos;
+    float vel_desired;
+    float vel_target;
+    float vel;
+    float accel_desired;
+    float accel_target;
+    float accel;
+};
+
+// thread stack usage
+struct PACKED log_STAK {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t thread_id;
+    uint8_t priority;
+    uint16_t stack_total;
+    uint16_t stack_free;
+    char name[16];
 };
 
 // FMT messages define all message formats other than FMT
@@ -1190,37 +1158,53 @@ struct PACKED log_PSCZ {
 // @Field: Vcc: Voltage to Motor
 // @Field: Temp: Motor temperature
 
-// @LoggerMessage: PSC
-// @Description: Position Control data
+// @LoggerMessage: PSCN
+// @Description: Position Control North
 // @Field: TimeUS: Time since system startup
-// @Field: TPX: Target position relative to origin, North
-// @Field: TPY: Target position relative to origin, East
-// @Field: PX: Position relative to origin, North
-// @Field: PY: Position relative to origin, East
-// @Field: TVX: Target velocity, North
-// @Field: TVY: Target velocity, East
-// @Field: VX: Velocity, North
-// @Field: VY: Velocity, East
-// @Field: TAX: Target acceleration, X-axis
-// @Field: TAY: Target acceleration, Y-axis
-// @Field: AX: Acceleration, X-axis
-// @Field: AY: Acceleration, Y-axis
+// @Field: TPN: Target position relative to EKF origin
+// @Field: PN: Position relative to EKF origin
+// @Field: DVN: Desired velocity North
+// @Field: TVN: Target velocity North
+// @Field: VN: Velocity North
+// @Field: DAN: Desired acceleration North
+// @Field: TAN: Target acceleration North
+// @Field: AN: Acceleration North
 
-// @LoggerMessage: PSCZ
-// @Description: Position Control Z-axis
+// @LoggerMessage: PSCE
+// @Description: Position Control East
 // @Field: TimeUS: Time since system startup
-// @Field: TPZ: Target position above EKF origin
-// @Field: PZ: Position above EKF origin
-// @Field: DVZ: Desired velocity Z-axis
-// @Field: TVZ: Target velocity Z-axis
-// @Field: VZ: Velocity Z-axis
-// @Field: DAZ: Desired acceleration Z-axis
-// @Field: TAZ: Target acceleration Z-axis
-// @Field: AZ: Acceleration Z-axis
-// @Field: ThO: Throttle output
+// @Field: TPE: Target position relative to EKF origin
+// @Field: PE: Position relative to EKF origin
+// @Field: DVE: Desired velocity East
+// @Field: TVE: Target velocity East
+// @Field: VE: Velocity East
+// @Field: DAE: Desired acceleration East
+// @Field: TAE: Target acceleration East
+// @Field: AE: Acceleration East
+
+// @LoggerMessage: PSCD
+// @Description: Position Control Down
+// @Field: TimeUS: Time since system startup
+// @Field: TPD: Target position relative to EKF origin
+// @Field: PD: Position relative to EKF origin
+// @Field: DVD: Desired velocity Down
+// @Field: TVD: Target velocity Down
+// @Field: VD: Velocity Down
+// @Field: DAD: Desired acceleration Down
+// @Field: TAD: Target acceleration Down
+// @Field: AD: Acceleration Down
+
+// @LoggerMessage: STAK
+// @Description: Stack information
+// @Field: TimeUS: Time since system startup
+// @Field: Id: thread ID
+// @Field: Pri: thread priority
+// @Field: Total: total stack
+// @Field: Free: free stack
+// @Field: Name: thread name
 
 // messages for all boards
-#define LOG_BASE_STRUCTURES \
+#define LOG_COMMON_STRUCTURES \
     { LOG_FORMAT_MSG, sizeof(log_Format), \
       "FMT", "BBnNZ",      "Type,Length,Name,Format,Columns", "-b---", "-----" },    \
     { LOG_UNIT_MSG, sizeof(log_Unit), \
@@ -1326,41 +1310,15 @@ LOG_STRUCTURE_FROM_VISUALODOM \
       "ERR",   "QBB",         "TimeUS,Subsys,ECode", "s--", "F--" }, \
     { LOG_WINCH_MSG, sizeof(log_Winch), \
       "WINC", "QBBBBBfffHfb", "TimeUS,Heal,ThEnd,Mov,Clut,Mode,DLen,Len,DRate,Tens,Vcc,Temp", "s-----mmn?vO", "F-----000000" }, \
-    { LOG_PSC_MSG, sizeof(log_PSC), \
-      "PSC", "Qffffffffffff", "TimeUS,TPX,TPY,PX,PY,TVX,TVY,VX,VY,TAX,TAY,AX,AY", "smmmmnnnnoooo", "F000000000000", true }, \
-    { LOG_PSCZ_MSG, sizeof(log_PSCZ), \
-      "PSCZ", "Qfffffffff", "TimeUS,TPZ,PZ,DVZ,TVZ,VZ,DAZ,TAZ,AZ,ThO", "smmnnnooo%", "F000000002", true }, \
+    { LOG_PSCN_MSG, sizeof(log_PSCN), \
+      "PSCN", "Qffffffff", "TimeUS,TPN,PN,DVN,TVN,VN,DAN,TAN,AN", "smmnnnooo", "F00000000" }, \
+    { LOG_PSCE_MSG, sizeof(log_PSCE), \
+      "PSCE", "Qffffffff", "TimeUS,TPE,PE,DVE,TVE,VE,DAE,TAE,AE", "smmnnnooo", "F00000000" }, \
+    { LOG_PSCD_MSG, sizeof(log_PSCD), \
+      "PSCD", "Qffffffff", "TimeUS,TPD,PD,DVD,TVD,VD,DAD,TAD,AD", "smmnnnooo", "F00000000" }, \
+    { LOG_STAK_MSG, sizeof(log_STAK), \
+      "STAK", "QBBHHN", "TimeUS,Id,Pri,Total,Free,Name", "s#----", "F-----", true }, \
 LOG_STRUCTURE_FROM_AIS \
-
-// @LoggerMessage: SBPH
-// @Description: Swift Health Data
-// @Field: TimeUS: Time since system startup
-// @Field: CrcError: Number of packet CRC errors on serial connection
-// @Field: LastInject: Timestamp of last raw data injection to GPS
-// @Field: IARhyp: Current number of integer ambiguity hypotheses
-
-// @LoggerMessage: SBRH
-// @Description: Swift Raw Message Data
-// @Field: TimeUS: Time since system startup
-// @Field: msg_flag: Swift message type
-// @Field: 1: Sender ID
-// @Field: 2: index; always 1
-// @Field: 3: pages; number of pages received
-// @Field: 4: msg length; number of bytes received
-// @Field: 5: unused; always zero
-// @Field: 6: data received from device
-
-#define LOG_SBP_STRUCTURES \
-    { LOG_MSG_SBPHEALTH, sizeof(log_SbpHealth), \
-      "SBPH", "QIII", "TimeUS,CrcError,LastInject,IARhyp", "s---", "F---" , true }, \
-    { LOG_MSG_SBPRAWH, sizeof(log_SbpRAWH), \
-      "SBRH", "QQQQQQQQ", "TimeUS,msg_flag,1,2,3,4,5,6", "s--b----", "F--0----" , true }, \
-    { LOG_MSG_SBPRAWM, sizeof(log_SbpRAWM), \
-      "SBRM", "QQQQQQQQQQQQQQQ", "TimeUS,msg_flag,1,2,3,4,5,6,7,8,9,10,11,12,13", "s??????????????", "F??????????????" , true }, \
-    { LOG_MSG_SBPEVENT, sizeof(log_SbpEvent), \
-      "SBRE", "QHIiBB", "TimeUS,GWk,GMS,ns_residual,level,quality", "s?????", "F?????" }
-
-#define LOG_COMMON_STRUCTURES LOG_BASE_STRUCTURES, LOG_SBP_STRUCTURES
 
 // message types 0 to 63 reserved for vehicle specific use
 
@@ -1385,10 +1343,8 @@ enum LogMessages : uint8_t {
     LOG_IDS_FROM_CAMERA,
     LOG_TERRAIN_MSG,
     LOG_CSRV_MSG,
-    LOG_ARSP_MSG,
     LOG_IDS_FROM_ESC_TELEM,
     LOG_IDS_FROM_BATTMONITOR,
-    LOG_MAG_MSG,
 
     LOG_IDS_FROM_GPS,
 
@@ -1408,21 +1364,14 @@ enum LogMessages : uint8_t {
     LOG_PIDN_MSG,
     LOG_PIDE_MSG,
     LOG_DSTL_MSG,
+    LOG_MAG_MSG,
+    LOG_ARSP_MSG,
     LOG_RPM_MSG,
     LOG_RFND_MSG,
     LOG_MAV_STATS,
     LOG_FORMAT_UNITS_MSG,
     LOG_UNIT_MSG,
     LOG_MULT_MSG,
-
-    LOG_MSG_SBPHEALTH,
-    LOG_MSG_SBPLLH,
-    LOG_MSG_SBPBASELINE,
-    LOG_MSG_SBPTRACKING1,
-    LOG_MSG_SBPTRACKING2,
-    LOG_MSG_SBPRAWH,
-    LOG_MSG_SBPRAWM,
-    LOG_MSG_SBPEVENT,
 
     LOG_RALLY_MSG,
     LOG_IDS_FROM_VISUALODOM,
@@ -1440,12 +1389,13 @@ enum LogMessages : uint8_t {
     LOG_ARM_DISARM_MSG,
     LOG_IDS_FROM_AVOIDANCE,
     LOG_WINCH_MSG,
-    LOG_PSC_MSG,
-    LOG_PSCZ_MSG,
+    LOG_PSCN_MSG,
+    LOG_PSCE_MSG,
+    LOG_PSCD_MSG,
     LOG_RAW_PROXIMITY_MSG,
     LOG_IDS_FROM_PRECLAND,
     LOG_IDS_FROM_AIS,
-
+    LOG_STAK_MSG,
 
     _LOG_LAST_MSG_
 };

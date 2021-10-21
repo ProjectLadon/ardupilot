@@ -3,6 +3,14 @@
 // protocols.
 #pragma once
 
+#include <AP_HAL/AP_HAL_Boards.h>
+
+#ifndef HAL_GCS_ENABLED
+#define HAL_GCS_ENABLED 1
+#endif
+
+#if HAL_GCS_ENABLED
+
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Common/AP_Common.h>
 #include "GCS_MAVLink.h"
@@ -31,7 +39,9 @@
 #define HAL_HIGH_LATENCY2_ENABLED !HAL_MINIMIZE_FEATURES
 #endif
 
-#ifndef HAL_NO_GCS
+#ifndef HAL_MAVLINK_INTERVALS_FROM_FILES_ENABLED
+#define HAL_MAVLINK_INTERVALS_FROM_FILES_ENABLED (HAVE_FILESYSTEM_SUPPORT && BOARD_FLASH_SIZE > 1024)
+#endif
 
 // macros used to determine if a message will fit in the space available.
 
@@ -89,6 +99,37 @@ public:
     // saveable rate of each stream
     AP_Int16        streamRates[GCS_MAVLINK_NUM_STREAM_RATES];
 };
+
+#if HAL_MAVLINK_INTERVALS_FROM_FILES_ENABLED
+class DefaultIntervalsFromFiles
+{
+
+public:
+
+    DefaultIntervalsFromFiles(uint16_t max_num);
+    ~DefaultIntervalsFromFiles();
+
+    void set(ap_message id, uint16_t interval);
+    uint16_t num_intervals() const {
+        return _num_intervals;
+    }
+    bool get_interval_for_ap_message_id(ap_message id, uint16_t &interval) const;
+    ap_message id_at(uint8_t ofs) const;
+    uint16_t interval_at(uint8_t ofs) const;
+
+private:
+
+    struct from_file_default_interval {
+        ap_message id;
+        uint16_t interval;
+    };
+
+    from_file_default_interval *_intervals;
+
+    uint16_t _num_intervals;
+    uint16_t _max_intervals;
+};
+#endif
 
 ///
 /// @class	GCS_MAVLINK
@@ -275,8 +316,10 @@ public:
     void send_generator_status() const;
     virtual void send_winch_status() const {};
     void send_water_depth() const;
+    int8_t battery_remaining_pct(const uint8_t instance) const;
+
 #if HAL_HIGH_LATENCY2_ENABLED
-    void send_high_latency() const;
+    void send_high_latency2() const;
 #endif // HAL_HIGH_LATENCY2_ENABLED
 
     // lock a channel, preventing use by MAVLink
@@ -414,6 +457,8 @@ protected:
     void handle_distance_sensor(const mavlink_message_t &msg);
     void handle_obstacle_distance(const mavlink_message_t &msg);
     void handle_obstacle_distance_3d(const mavlink_message_t &msg);
+
+    void handle_adsb_message(const mavlink_message_t &msg);
 
     void handle_osd_param_config(const mavlink_message_t &msg) const;
 
@@ -674,6 +719,13 @@ private:
     // boolean that indicated that message intervals have been set
     // from streamrates:
     bool deferred_messages_initialised;
+#if HAL_MAVLINK_INTERVALS_FROM_FILES_ENABLED
+    // read configuration files from (e.g.) SD and ROMFS, set
+    // intervals from same
+    void initialise_message_intervals_from_config_files();
+    // read file, set message intervals from it:
+    void get_intervals_from_filepath(const char *path, DefaultIntervalsFromFiles &);
+#endif
     // return interval deferred message bucket should be sent after.
     // When sending parameters and waypoints this may be longer than
     // the interval specified in "deferred"
@@ -835,6 +887,12 @@ private:
     void load_signing_key(void);
     bool signing_enabled(void) const;
     static void save_signing_timestamp(bool force_save_now);
+
+#if HAL_MAVLINK_INTERVALS_FROM_FILES_ENABLED
+    // structure containing default intervals read from files for this
+    // link:
+    DefaultIntervalsFromFiles *default_intervals_from_files;
+#endif
 
     // alternative protocol handler support
     struct {
@@ -1112,9 +1170,9 @@ void can_printf(const char *fmt, ...);
 }
 #define GCS_SEND_TEXT(severity, format, args...) can_printf(format, ##args)
 
-#else // HAL_NO_GCS
+#else // HAL_GCS_ENABLED
 // empty send text when we have no GCS
 #define GCS_SEND_TEXT(severity, format, args...)
 
-#endif // HAL_NO_GCS
+#endif // HAL_GCS_ENABLED
 

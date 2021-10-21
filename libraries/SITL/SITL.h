@@ -14,6 +14,7 @@
 #include "SIM_Gripper_EPM.h"
 #include "SIM_Gripper_Servo.h"
 #include "SIM_I2C.h"
+#include "SIM_SPI.h"
 #include "SIM_Parachute.h"
 #include "SIM_Precland.h"
 #include "SIM_Sprayer.h"
@@ -131,9 +132,6 @@ public:
     enum GPSType {
         GPS_TYPE_NONE  = 0,
         GPS_TYPE_UBLOX = 1,
-        GPS_TYPE_MTK   = 2,
-        GPS_TYPE_MTK16 = 3,
-        GPS_TYPE_MTK19 = 4,
         GPS_TYPE_NMEA  = 5,
         GPS_TYPE_SBP   = 6,
         GPS_TYPE_FILE  = 7,
@@ -148,9 +146,6 @@ public:
     };
 
     struct sitl_fdm state;
-
-    // loop update rate in Hz
-    uint16_t update_rate_hz;
 
     // throttle when motors are active
     float throttle;
@@ -407,6 +402,10 @@ public:
         return i2c_sim.ioctl(i2c_operation, data);
     }
 
+    int spi_ioctl(uint8_t bus, uint8_t cs_pin, uint8_t spi_operation, void *data) {
+        return spi_sim.ioctl(bus, cs_pin, spi_operation, data);
+    }
+
     Sprayer sprayer_sim;
 
     // simulated ship takeoffs
@@ -418,6 +417,7 @@ public:
     Parachute parachute_sim;
     Buzzer buzzer_sim;
     I2C i2c_sim;
+    SPI spi_sim;
     ToneAlarm tonealarm_sim;
     SIM_Precland precland_sim;
     RichenPower richenpower_sim;
@@ -435,8 +435,6 @@ public:
         uint8_t num_leds[16];
         uint32_t send_counter;
     } led;
-
-    EFI_MegaSquirt efi_ms;
 
     AP_Int8 led_layout;
 
@@ -479,7 +477,6 @@ public:
 
     // Master instance to use servos from with slave instances
     AP_Int8 ride_along_master;
-
 };
 
 } // namespace SITL

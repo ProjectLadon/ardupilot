@@ -1221,7 +1221,7 @@ const struct AP_Logger::log_write_fmt *AP_Logger::log_write_fmt_for_msg_type(con
 // returns true if the msg_type is already taken
 bool AP_Logger::msg_type_in_use(const uint8_t msg_type) const
 {
-    // check static list of messages (e.g. from LOG_BASE_STRUCTURES)
+    // check static list of messages (e.g. from LOG_COMMON_STRUCTURES)
     // check the write format types to see if we've used this one
     for (uint16_t i=0; i<_num_types;i++) {
         if (structure(i)->msg_type == msg_type) {
@@ -1340,6 +1340,7 @@ int16_t AP_Logger::Write_calc_msg_len(const char *fmt) const
 void AP_Logger::io_thread(void)
 {
     uint32_t last_run_us = AP_HAL::micros();
+    uint8_t counter = 0;
 
     while (true) {
         uint32_t now = AP_HAL::micros();
@@ -1353,6 +1354,10 @@ void AP_Logger::io_thread(void)
         last_run_us = AP_HAL::micros();
 
         FOR_EACH_BACKEND(io_timer());
+
+        if (++counter % 4 == 0) {
+            hal.util->log_stack_info();
+        }
     }
 }
 

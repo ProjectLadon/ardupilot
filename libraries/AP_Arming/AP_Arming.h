@@ -168,6 +168,10 @@ protected:
 
     bool fence_checks(bool report);
 
+#if HAL_HAVE_IMU_HEATER
+    bool heater_min_temperature_checks(bool report);
+#endif
+
     bool camera_checks(bool display_failure);
 
     bool osd_checks(bool display_failure) const;
@@ -202,7 +206,7 @@ protected:
     void check_failed(bool report, const char *fmt, ...) const FMT_PRINTF(3, 4);
 
     void Log_Write_Arm(bool forced, AP_Arming::Method method);
-    void Log_Write_Disarm(AP_Arming::Method method);
+    void Log_Write_Disarm(bool forced, AP_Arming::Method method);
 
 private:
 

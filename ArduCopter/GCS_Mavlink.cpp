@@ -129,6 +129,7 @@ void GCS_MAVLINK_Copter::send_position_target_local_ned()
         return;
     case ModeGuided::SubMode::TakeOff:
     case ModeGuided::SubMode::WP:
+    case ModeGuided::SubMode::Pos:
         type_mask = POSITION_TARGET_TYPEMASK_VX_IGNORE | POSITION_TARGET_TYPEMASK_VY_IGNORE | POSITION_TARGET_TYPEMASK_VZ_IGNORE |
                     POSITION_TARGET_TYPEMASK_AX_IGNORE | POSITION_TARGET_TYPEMASK_AY_IGNORE | POSITION_TARGET_TYPEMASK_AZ_IGNORE |
                     POSITION_TARGET_TYPEMASK_YAW_IGNORE| POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE; // ignore everything except position
@@ -1008,6 +1009,8 @@ void GCS_MAVLINK_Copter::handleMessage(const mavlink_message_t &msg)
         POSITION_TARGET_TYPEMASK_YAW_IGNORE;
     constexpr uint32_t MAVLINK_SET_POS_TYPE_MASK_YAW_RATE_IGNORE =
         POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE;
+    constexpr uint32_t MAVLINK_SET_POS_TYPE_MASK_FORCE_SET =
+        POSITION_TARGET_TYPEMASK_FORCE_SET;
 
     switch (msg.msgid) {
 
@@ -1118,6 +1121,12 @@ void GCS_MAVLINK_Copter::handleMessage(const mavlink_message_t &msg)
         bool acc_ignore      = packet.type_mask & MAVLINK_SET_POS_TYPE_MASK_ACC_IGNORE;
         bool yaw_ignore      = packet.type_mask & MAVLINK_SET_POS_TYPE_MASK_YAW_IGNORE;
         bool yaw_rate_ignore = packet.type_mask & MAVLINK_SET_POS_TYPE_MASK_YAW_RATE_IGNORE;
+        bool force_set       = packet.type_mask & MAVLINK_SET_POS_TYPE_MASK_FORCE_SET;
+
+        // force_set true, do not accept command
+        if (force_set) {
+            break;
+        }
 
         // prepare position
         Vector3f pos_vector;
@@ -1206,6 +1215,12 @@ void GCS_MAVLINK_Copter::handleMessage(const mavlink_message_t &msg)
         bool acc_ignore      = packet.type_mask & MAVLINK_SET_POS_TYPE_MASK_ACC_IGNORE;
         bool yaw_ignore      = packet.type_mask & MAVLINK_SET_POS_TYPE_MASK_YAW_IGNORE;
         bool yaw_rate_ignore = packet.type_mask & MAVLINK_SET_POS_TYPE_MASK_YAW_RATE_IGNORE;
+        bool force_set       = packet.type_mask & MAVLINK_SET_POS_TYPE_MASK_FORCE_SET;
+
+        // force_set true, do not accept command
+        if (force_set) {
+            break;
+        }
 
         // extract location from message
         Location loc;
@@ -1242,11 +1257,9 @@ void GCS_MAVLINK_Copter::handleMessage(const mavlink_message_t &msg)
 
         // prepare yaw
         float yaw_cd = 0.0f;
-        bool yaw_relative = false;
         float yaw_rate_cds = 0.0f;
         if (!yaw_ignore) {
             yaw_cd = ToDeg(packet.yaw) * 100.0f;
-            yaw_relative = packet.coordinate_frame == MAV_FRAME_BODY_NED || packet.coordinate_frame == MAV_FRAME_BODY_OFFSET_NED;
         }
         if (!yaw_rate_ignore) {
             yaw_rate_cds = ToDeg(packet.yaw_rate) * 100.0f;
@@ -1267,13 +1280,13 @@ void GCS_MAVLINK_Copter::handleMessage(const mavlink_message_t &msg)
                 copter.mode_guided.init(true);
                 break;
             }
-            copter.mode_guided.set_destination_posvel(pos_neu_cm, vel_vector, !yaw_ignore, yaw_cd, !yaw_rate_ignore, yaw_rate_cds, yaw_relative);
+            copter.mode_guided.set_destination_posvel(pos_neu_cm, vel_vector, !yaw_ignore, yaw_cd, !yaw_rate_ignore, yaw_rate_cds);
         } else if (pos_ignore && !vel_ignore) {
-            copter.mode_guided.set_velaccel(vel_vector, accel_vector, !yaw_ignore, yaw_cd, !yaw_rate_ignore, yaw_rate_cds, yaw_relative);
+            copter.mode_guided.set_velaccel(vel_vector, accel_vector, !yaw_ignore, yaw_cd, !yaw_rate_ignore, yaw_rate_cds);
         } else if (pos_ignore && vel_ignore && !acc_ignore) {
-            copter.mode_guided.set_accel(accel_vector, !yaw_ignore, yaw_cd, !yaw_rate_ignore, yaw_rate_cds, yaw_relative);
+            copter.mode_guided.set_accel(accel_vector, !yaw_ignore, yaw_cd, !yaw_rate_ignore, yaw_rate_cds);
         } else if (!pos_ignore && vel_ignore && acc_ignore) {
-            copter.mode_guided.set_destination(loc, !yaw_ignore, yaw_cd, !yaw_rate_ignore, yaw_rate_cds, yaw_relative);
+            copter.mode_guided.set_destination(loc, !yaw_ignore, yaw_cd, !yaw_rate_ignore, yaw_rate_cds);
         } else {
             // input is not valid so stop
             copter.mode_guided.init(true);
@@ -1316,15 +1329,6 @@ void GCS_MAVLINK_Copter::handleMessage(const mavlink_message_t &msg)
         }
         break;
     }
-
-    case MAVLINK_MSG_ID_ADSB_VEHICLE:
-    case MAVLINK_MSG_ID_UAVIONIX_ADSB_OUT_CFG:
-    case MAVLINK_MSG_ID_UAVIONIX_ADSB_OUT_DYNAMIC:
-    case MAVLINK_MSG_ID_UAVIONIX_ADSB_TRANSCEIVER_HEALTH_REPORT:
-#if HAL_ADSB_ENABLED
-        copter.adsb.handle_message(chan, msg);
-#endif
-        break;
 
 #if TOY_MODE_ENABLED == ENABLED
     case MAVLINK_MSG_ID_NAMED_VALUE_INT:

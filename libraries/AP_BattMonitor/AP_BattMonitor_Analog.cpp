@@ -41,7 +41,7 @@ const AP_Param::GroupInfo AP_BattMonitor_Analog::var_info[] = {
     // @Description: Voltage offset at zero current on current sensor
     // @Units: V
     // @User: Standard
-    AP_GROUPINFO("AMP_OFFSET", 5, AP_BattMonitor_Analog, _curr_amp_offset, 0),
+    AP_GROUPINFO("AMP_OFFSET", 5, AP_BattMonitor_Analog, _curr_amp_offset, AP_BATT_CURR_AMP_OFFSET_DEFAULT),
 
     AP_GROUPEND
 };
@@ -58,8 +58,6 @@ AP_BattMonitor_Analog::AP_BattMonitor_Analog(AP_BattMonitor &mon,
     _volt_pin_analog_source = hal.analogin->channel(_volt_pin);
     _curr_pin_analog_source = hal.analogin->channel(_curr_pin);
 
-    // always healthy
-    _state.healthy = true;
 }
 
 // read - read the voltage and current
@@ -67,7 +65,7 @@ void
 AP_BattMonitor_Analog::read()
 {
     // this copes with changing the pin at runtime
-    _volt_pin_analog_source->set_pin(_volt_pin);
+    _state.healthy = _volt_pin_analog_source->set_pin(_volt_pin);
 
     // get voltage
     _state.voltage = _volt_pin_analog_source->voltage_average() * _volt_multiplier;
@@ -79,7 +77,7 @@ AP_BattMonitor_Analog::read()
         float dt = tnow - _state.last_time_micros;
 
         // this copes with changing the pin at runtime
-        _curr_pin_analog_source->set_pin(_curr_pin);
+        _state.healthy &= _curr_pin_analog_source->set_pin(_curr_pin);
 
         // read current
         _state.current_amps = (_curr_pin_analog_source->voltage_average() - _curr_amp_offset) * _curr_amp_per_volt;

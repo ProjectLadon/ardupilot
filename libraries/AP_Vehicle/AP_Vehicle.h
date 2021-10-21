@@ -46,6 +46,9 @@
 #include <AP_Frsky_Telem/AP_Frsky_Parameters.h>
 #include <AP_ExternalAHRS/AP_ExternalAHRS.h>
 #include <AP_VideoTX/AP_SmartAudio.h>
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+#include <SITL/SITL.h>
+#endif
 
 class AP_Vehicle : public AP_HAL::HAL::Callbacks {
 
@@ -339,7 +342,7 @@ protected:
     AP_MSP msp;
 #endif
 
-#if GENERATOR_ENABLED
+#if HAL_GENERATOR_ENABLED
     AP_Generator generator;
 #endif
 
@@ -358,7 +361,14 @@ protected:
     void publish_osd_info();
 #endif
 
+    // update accel calibration
+    void accel_cal_update();
+
     ModeReason control_mode_reason = ModeReason::UNKNOWN;
+
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    SITL::SIM sitl;
+#endif
 
 private:
 

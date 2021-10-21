@@ -50,7 +50,7 @@
 #include <Filter/Filter.h>                  // Filter library
 #include <AP_Airspeed/AP_Airspeed.h>        // needed for AHRS build
 #include <AP_Vehicle/AP_Vehicle.h>          // needed for AHRS build
-#include <AP_InertialNav/AP_InertialNav_NavEKF.h>  // ArduPilot Mega inertial navigation library
+#include <AP_InertialNav/AP_InertialNav.h>  // inertial navigation library
 #include <AC_WPNav/AC_WPNav.h>              // ArduCopter waypoint navigation library
 #include <AC_WPNav/AC_Loiter.h>             // ArduCopter Loiter Mode Library
 #include <AC_WPNav/AC_Circle.h>             // circle navigation library
@@ -168,10 +168,6 @@
 #include "Parameters.h"
 #if HAL_ADSB_ENABLED
 #include "avoidance_adsb.h"
-#endif
-
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-#include <SITL/SITL.h>
 #endif
 
 #include "mode.h"
@@ -305,10 +301,6 @@ private:
     // Inertial Navigation EKF - different viewpoint
     AP_AHRS_View *ahrs_view;
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    SITL::SIM sitl;
-#endif
-
     // Arming/Disarming management class
     AP_Arming_Copter arming;
 
@@ -364,7 +356,7 @@ private:
             uint8_t initialised_params      : 1; // 24      // true when the all parameters have been initialised. we cannot send parameters to the GCS until this is done
             uint8_t unused3                 : 1; // 25      // was compass_init_location; true when the compass's initial location has been set
             uint8_t unused2                 : 1; // 26      // aux switch rc_override is allowed
-            uint8_t armed_with_switch       : 1; // 27      // we armed using a arming switch
+            uint8_t armed_with_airmode_switch : 1; // 27      // we armed using a arming switch
         };
         uint32_t value;
     } ap_t;
@@ -455,7 +447,7 @@ private:
     Location current_loc;
 
     // Inertial Navigation
-    AP_InertialNav_NavEKF inertial_nav;
+    AP_InertialNav inertial_nav;
 
     // Attitude, Position and Waypoint navigation objects
     // To-Do: move inertial nav up or other navigation variables down here
@@ -479,7 +471,7 @@ private:
 
     // Camera
 #if CAMERA == ENABLED
-    AP_Camera camera{MASK_LOG_CAMERA, current_loc};
+    AP_Camera camera{MASK_LOG_CAMERA};
 #endif
 
     // Camera/Antenna mount tracking and stabilisation stuff
@@ -590,14 +582,14 @@ private:
         ESCCAL_DISABLED = 9,
     };
 
-    enum Failsafe_Action {
-        Failsafe_Action_None           = 0,
-        Failsafe_Action_Land           = 1,
-        Failsafe_Action_RTL            = 2,
-        Failsafe_Action_SmartRTL       = 3,
-        Failsafe_Action_SmartRTL_Land  = 4,
-        Failsafe_Action_Terminate      = 5,
-        Failsafe_Action_Auto_DO_LAND_START = 6,
+    enum class FailsafeAction : uint8_t {
+        NONE               = 0,
+        LAND               = 1,
+        RTL                = 2,
+        SMARTRTL           = 3,
+        SMARTRTL_LAND      = 4,
+        TERMINATE          = 5,
+        AUTO_DO_LAND_START = 6
     };
 
     enum class FailsafeOption {
@@ -616,17 +608,17 @@ private:
     };
 
     static constexpr int8_t _failsafe_priorities[] = {
-                                                      Failsafe_Action_Terminate,
-                                                      Failsafe_Action_Land,
-                                                      Failsafe_Action_RTL,
-                                                      Failsafe_Action_SmartRTL_Land,
-                                                      Failsafe_Action_SmartRTL,
-                                                      Failsafe_Action_None,
+                                                      (int8_t)FailsafeAction::TERMINATE,
+                                                      (int8_t)FailsafeAction::LAND,
+                                                      (int8_t)FailsafeAction::RTL,
+                                                      (int8_t)FailsafeAction::SMARTRTL_LAND,
+                                                      (int8_t)FailsafeAction::SMARTRTL,
+                                                      (int8_t)FailsafeAction::NONE,
                                                       -1 // the priority list must end with a sentinel of -1
                                                      };
 
     #define FAILSAFE_LAND_PRIORITY 1
-    static_assert(_failsafe_priorities[FAILSAFE_LAND_PRIORITY] == Failsafe_Action_Land,
+    static_assert(_failsafe_priorities[FAILSAFE_LAND_PRIORITY] == (int8_t)FailsafeAction::LAND,
                   "FAILSAFE_LAND_PRIORITY must match the entry in _failsafe_priorities");
     static_assert(_failsafe_priorities[ARRAY_SIZE(_failsafe_priorities) - 1] == -1,
                   "_failsafe_priorities is missing the sentinel");
@@ -743,7 +735,7 @@ private:
     void set_mode_SmartRTL_or_land_with_pause(ModeReason reason);
     void set_mode_auto_do_land_start_or_RTL(ModeReason reason);
     bool should_disarm_on_failsafe();
-    void do_failsafe_action(Failsafe_Action action, ModeReason reason);
+    void do_failsafe_action(FailsafeAction action, ModeReason reason);
 
     // failsafe.cpp
     void failsafe_enable();
@@ -869,7 +861,7 @@ private:
     bool rangefinder_up_ok() const;
     void rpm_update();
     void update_optical_flow(void);
-    void accel_cal_update(void);
+    void compass_cal_update(void);
     void init_proximity();
     void update_proximity();
 

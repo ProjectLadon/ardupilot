@@ -76,10 +76,6 @@
 #include <AP_Scripting/AP_Scripting.h>
 #endif
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-#include <SITL/SITL.h>
-#endif
-
 // Local modules
 #include "mode.h"
 #include "AP_Arming.h"
@@ -169,10 +165,6 @@ private:
     AP_OSD osd;
 #endif
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    SITL::SIM sitl;
-#endif
-
     // GCS handling
     GCS_Rover _gcs;  // avoid using this; use gcs()
     GCS_Rover &gcs() { return _gcs; }
@@ -185,7 +177,7 @@ private:
 
     // Camera
 #if CAMERA == ENABLED
-    AP_Camera camera{MASK_LOG_CAMERA, current_loc};
+    AP_Camera camera{MASK_LOG_CAMERA};
 #endif
 
     // Camera/Antenna mount tracking and stabilisation stuff
@@ -216,8 +208,8 @@ private:
     // true if we have a position estimate from AHRS
     bool have_position;
 
-    // range finder last update (used for DPTH logging)
-    uint32_t rangefinder_last_reading_ms;
+    // range finder last update for each instance (used for DPTH logging)
+    uint32_t rangefinder_last_reading_ms[RANGEFINDER_MAX_INSTANCES];
 
     // Ground speed
     // The amount current ground speed is below min ground speed.  meters per second
@@ -359,7 +351,6 @@ private:
     void update_compass(void);
     void compass_save(void);
     void update_wheel_encoder();
-    void accel_cal_update(void);
     void read_rangefinders(void);
     void read_airspeed();
     void rpm_update(void);

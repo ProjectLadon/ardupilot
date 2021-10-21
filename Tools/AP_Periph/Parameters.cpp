@@ -334,7 +334,7 @@ const AP_Param::Info AP_Periph_FW::var_info[] = {
     GSCALAR(log_bitmask,    "LOG_BITMASK",          4),
 #endif
 
-#ifndef HAL_NO_GCS
+#if HAL_GCS_ENABLED
     // @Param: SYSID_THISMAV
     // @DisplayName: MAVLink system ID of this vehicle
     // @Description: Allows setting an individual system id for this vehicle to distinguish it from others on the same network
@@ -347,6 +347,11 @@ const AP_Param::Info AP_Periph_FW::var_info[] = {
     GOBJECT(serial_manager, "SERIAL",   AP_SerialManager),
 #endif
 
+#ifdef ENABLE_SCRIPTING
+    // @Group: SCR_
+    // @Path: ../libraries/AP_Scripting/AP_Scripting.cpp
+    GOBJECT(scripting, "SCR_", AP_Scripting),
+#endif
     AP_VAREND
 };
 

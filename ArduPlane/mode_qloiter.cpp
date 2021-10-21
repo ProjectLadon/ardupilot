@@ -1,6 +1,8 @@
 #include "mode.h"
 #include "Plane.h"
 
+#if HAL_QUADPLANE_ENABLED
+
 bool ModeQLoiter::_enter()
 {
     // initialise loiter
@@ -41,8 +43,6 @@ void ModeQLoiter::run()
     if (!quadplane.motors->armed()) {
         plane.mode_qloiter._enter();
     }
-
-    quadplane.check_attitude_relax();
 
     if (quadplane.should_relax()) {
         loiter_nav->soften_for_landing();
@@ -120,3 +120,4 @@ void ModeQLoiter::run()
     quadplane.run_z_controller();
 }
 
+#endif

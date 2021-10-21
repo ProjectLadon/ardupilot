@@ -49,6 +49,7 @@ public:
         k_param_sysid_this_mav,
         k_param_serial_manager,
         k_param_gps_mb_only_can_port,
+        k_param_scripting,
     };
 
     AP_Int16 format_version;
@@ -114,7 +115,7 @@ public:
     AP_Int32        log_bitmask;
 #endif
 
-#ifndef HAL_NO_GCS
+#if HAL_GCS_ENABLED
     AP_Int16 sysid_this_mav;
 #endif
 

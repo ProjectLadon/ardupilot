@@ -48,6 +48,7 @@ void Blimp::init_ardupilot()
     allocate_motors();
 
     // initialise rc channels including setting mode
+    rc().convert_options(RC_Channel::AUX_FUNC::ARMDISARM_UNUSED, RC_Channel::AUX_FUNC::ARMDISARM);
     rc().init();
 
     // sets up motors and output to escs
@@ -262,7 +263,7 @@ void Blimp::allocate_motors(void)
         break;
     }
     if (motors == nullptr) {
-        AP_HAL::panic("Unable to allocate FRAME_CLASS=%u", (unsigned)g2.frame_class.get());
+        AP_BoardConfig::allocation_error("FRAME_CLASS=%u", (unsigned)g2.frame_class.get());
     }
     AP_Param::load_object_from_eeprom(motors, Fins::var_info);
 
