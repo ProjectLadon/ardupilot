@@ -342,7 +342,7 @@ const AP_Param::Info Copter::var_info[] = {
     // @Param: FRAME_TYPE
     // @DisplayName: Frame Type (+, X, V, etc)
     // @Description: Controls motor mixing for multicopters.  Not used for Tri or Traditional Helicopters.
-    // @Values: 0:Plus, 1:X, 2:V, 3:H, 4:V-Tail, 5:A-Tail, 10:Y6B, 11:Y6F, 12:BetaFlightX, 13:DJIX, 14:ClockwiseX, 15: I, 18: BetaFlightXReversed
+    // @Values: 0:Plus, 1:X, 2:V, 3:H, 4:V-Tail, 5:A-Tail, 10:Y6B, 11:Y6F, 12:BetaFlightX, 13:DJIX, 14:ClockwiseX, 15: I, 18: BetaFlightXReversed, 19:Y4
     // @User: Standard
     // @RebootRequired: True
     GSCALAR(frame_type, "FRAME_TYPE", HAL_FRAME_TYPE_DEFAULT),
@@ -1102,6 +1102,13 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Range: -0.5 1.0
     // @User: Advanced
     AP_GROUPINFO("PILOT_Y_EXPO", 50, ParametersG2, pilot_y_expo, PILOT_Y_EXPO_DEFAULT),
+
+    // @Param: SURFTRAK_MODE
+    // @DisplayName: Surface Tracking Mode
+    // @Description: set which surface to track in surface tracking
+    // @Values: 0:Do not track, 1:Ground, 2:Ceiling
+    // @User: Advanced
+    AP_GROUPINFO("SURFTRAK_MODE", 51, ParametersG2, surftrak_mode, (uint8_t)Copter::SurfaceTracking::Surface::GROUND),
 
     AP_GROUPEND
 };

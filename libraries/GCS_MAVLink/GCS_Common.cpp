@@ -68,7 +68,7 @@
   #include <AP_Common/AP_Common.h>
 
   // To be replaced with macro saying if KDECAN library is included
-  #if APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
+  #if APM_BUILD_COPTER_OR_HELI || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
     #include <AP_KDECAN/AP_KDECAN.h>
   #endif
   #include <AP_ToshibaCAN/AP_ToshibaCAN.h>
@@ -76,7 +76,9 @@
   #include <AP_UAVCAN/AP_UAVCAN.h>
 #endif
 
+#if !defined(HAL_BUILD_AP_PERIPH) || defined(HAL_PERIPH_ENABLE_BATTERY)
 #include <AP_BattMonitor/AP_BattMonitor.h>
+#endif
 #include <AP_GPS/AP_GPS.h>
 
 #include <ctype.h>
@@ -216,12 +218,17 @@ void GCS_MAVLINK::send_mcu_status(void)
 
 // returns the battery remaining percentage if valid, -1 otherwise
 int8_t GCS_MAVLINK::battery_remaining_pct(const uint8_t instance) const {
+#if !defined(HAL_BUILD_AP_PERIPH) || defined(HAL_PERIPH_ENABLE_BATTERY)
     uint8_t percentage;
     return AP::battery().capacity_remaining_pct(percentage, instance) ? MIN(percentage, INT8_MAX) : -1;
+#else
+    return -1;
+#endif
 }
 
 void GCS_MAVLINK::send_battery_status(const uint8_t instance) const
 {
+#if !defined(HAL_BUILD_AP_PERIPH) || defined(HAL_PERIPH_ENABLE_BATTERY)
     // catch the battery backend not supporting the required number of cells
     static_assert(sizeof(AP_BattMonitor::cells) >= (sizeof(uint16_t) * MAVLINK_MSG_BATTERY_STATUS_FIELD_VOLTAGES_LEN),
                   "Not enough battery cells for the MAVLink message");
@@ -300,11 +307,15 @@ void GCS_MAVLINK::send_battery_status(const uint8_t instance) const
                                     cell_volts_ext, // Cell 11..14 voltages
                                     0, // battery mode
                                     0); // fault_bitmask
+#else
+    (void)instance;
+#endif
 }
 
 // returns true if all battery instances were reported
 bool GCS_MAVLINK::send_battery_status()
 {
+#if !defined(HAL_BUILD_AP_PERIPH) || defined(HAL_PERIPH_ENABLE_BATTERY)
     const AP_BattMonitor &battery = AP::battery();
 
     for(uint8_t i = 0; i < AP_BATT_MONITOR_MAX_INSTANCES; i++) {
@@ -319,6 +330,9 @@ bool GCS_MAVLINK::send_battery_status()
         }
     }
     return true;
+#else
+    return false;
+#endif
 }
 
 void GCS_MAVLINK::send_distance_sensor(const AP_RangeFinder_Backend *sensor, const uint8_t instance) const
@@ -398,7 +412,7 @@ void GCS_MAVLINK::send_rangefinder() const
     }
     mavlink_msg_rangefinder_send(
             chan,
-            s->distance_cm() * 0.01f,
+            s->distance(),
             s->voltage_mv() * 0.001f);
 }
 
@@ -890,6 +904,7 @@ ap_message GCS_MAVLINK::mavlink_id_to_ap_message_id(const uint32_t mavlink_id) c
         { MAVLINK_MSG_ID_WATER_DEPTH,           MSG_WATER_DEPTH},
         { MAVLINK_MSG_ID_HIGH_LATENCY2,         MSG_HIGH_LATENCY2},
         { MAVLINK_MSG_ID_AIS_VESSEL,            MSG_AIS_VESSEL},
+        { MAVLINK_MSG_ID_UAVIONIX_ADSB_OUT_STATUS, MSG_UAVIONIX_ADSB_OUT_STATUS},
             };
 
     for (uint8_t i=0; i<ARRAY_SIZE(map); i++) {
@@ -2215,6 +2230,7 @@ void GCS::setup_uarts()
 // report battery2 state
 void GCS_MAVLINK::send_battery2()
 {
+#if !defined(HAL_BUILD_AP_PERIPH) || defined(HAL_PERIPH_ENABLE_BATTERY)
     const AP_BattMonitor &battery = AP::battery();
 
     if (battery.num_instances() > 1) {
@@ -2226,6 +2242,7 @@ void GCS_MAVLINK::send_battery2()
         }
         mavlink_msg_battery2_send(chan, battery.voltage(1)*1000, current);
     }
+#endif
 }
 
 /*
@@ -2335,7 +2352,11 @@ void GCS_MAVLINK::send_autopilot_version() const
 {
     uint32_t flight_sw_version;
     uint32_t middleware_sw_version = 0;
+#ifdef APJ_BOARD_ID
+    uint32_t board_version { uint32_t(APJ_BOARD_ID) << 16 };
+#else
     uint32_t board_version = 0;
+#endif
     char flight_custom_version[MAVLINK_MSG_AUTOPILOT_VERSION_FIELD_FLIGHT_CUSTOM_VERSION_LEN]{};
     char middleware_custom_version[MAVLINK_MSG_AUTOPILOT_VERSION_FIELD_MIDDLEWARE_CUSTOM_VERSION_LEN]{};
     char os_custom_version[MAVLINK_MSG_AUTOPILOT_VERSION_FIELD_OS_CUSTOM_VERSION_LEN]{};
@@ -2773,12 +2794,14 @@ MAV_RESULT GCS_MAVLINK::handle_preflight_reboot(const mavlink_command_long_t &pa
             // the following text is unlikely to make it out...
             send_text(MAV_SEVERITY_WARNING,"deferencing a bad thing");
 
+#if CONFIG_HAL_BOARD != HAL_BOARD_ESP32
+// esp32 can't do this bit, skip it, return an error
             void *foo = (void*)0xE000ED38;
 
             typedef void (*fptr)();
             fptr gptr = (fptr) (void *) foo;
             gptr();
-
+#endif
             return MAV_RESULT_FAILED;
         }
         if (is_equal(packet.param4, 95.0f)) {
@@ -3599,6 +3622,7 @@ void GCS_MAVLINK::handle_common_message(const mavlink_message_t &msg)
     case MAVLINK_MSG_ID_UAVIONIX_ADSB_OUT_CFG:
     case MAVLINK_MSG_ID_UAVIONIX_ADSB_OUT_DYNAMIC:
     case MAVLINK_MSG_ID_UAVIONIX_ADSB_TRANSCEIVER_HEALTH_REPORT:
+    case MAVLINK_MSG_ID_UAVIONIX_ADSB_OUT_CONTROL:
         handle_adsb_message(msg);
         break;
 
@@ -3822,6 +3846,8 @@ MAV_RESULT GCS_MAVLINK::_handle_command_preflight_calibration(const mavlink_comm
         return _handle_command_preflight_calibration_baro();
     }
 
+    rc().calibrating(is_positive(packet.param4));
+
 #if HAL_INS_ENABLED
     if (is_equal(packet.param5,1.0f)) {
         // start with gyro calibration
@@ -3910,7 +3936,7 @@ MAV_RESULT GCS_MAVLINK::handle_command_preflight_can(const mavlink_command_long_
         switch (AP::can().get_driver_type(i)) {
             case AP_CANManager::Driver_Type_KDECAN: {
 // To be replaced with macro saying if KDECAN library is included
-#if APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
+#if APM_BUILD_COPTER_OR_HELI || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)
                 AP_KDECAN *ap_kdecan = AP_KDECAN::get_kdecan(i);
 
                 if (ap_kdecan != nullptr) {
@@ -3924,7 +3950,7 @@ MAV_RESULT GCS_MAVLINK::handle_command_preflight_can(const mavlink_command_long_
             }
             case AP_CANManager::Driver_Type_CANTester: {
 // To be replaced with macro saying if KDECAN library is included
-#if (APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)) && (HAL_MAX_CAN_PROTOCOL_DRIVERS > 1 && !HAL_MINIMIZE_FEATURES)
+#if (APM_BUILD_COPTER_OR_HELI || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub)) && (HAL_MAX_CAN_PROTOCOL_DRIVERS > 1 && !HAL_MINIMIZE_FEATURES)
                 CANTester *cantester = CANTester::get_cantester(i);
 
                 if (cantester != nullptr) {
@@ -3982,11 +4008,13 @@ MAV_RESULT GCS_MAVLINK::handle_command_do_set_mission_current(const mavlink_comm
 
 MAV_RESULT GCS_MAVLINK::handle_command_battery_reset(const mavlink_command_long_t &packet)
 {
+#if !defined(HAL_BUILD_AP_PERIPH) || defined(HAL_PERIPH_ENABLE_BATTERY)
     const uint16_t battery_mask = packet.param1;
     const float percentage = packet.param2;
     if (AP::battery().reset_remaining_mask(battery_mask, percentage)) {
         return MAV_RESULT_ACCEPTED;
     }
+#endif
     return MAV_RESULT_FAILED;
 }
 
@@ -4280,22 +4308,17 @@ MAV_RESULT GCS_MAVLINK::handle_command_long_packet(const mavlink_command_long_t 
     case MAV_CMD_BATTERY_RESET:
         result = handle_command_battery_reset(packet);
         break;
-
-    case MAV_CMD_DO_ADSB_OUT_IDENT:
+        
 #if HAL_ADSB_ENABLED
-        if (AP::ADSB() == nullptr) {
-            result = MAV_RESULT_UNSUPPORTED;
-        } else if (AP::ADSB()->ident_is_active()) {
-            result = MAV_RESULT_TEMPORARILY_REJECTED;
-        } else if (AP::ADSB()->ident_start()) {
+    case MAV_CMD_DO_ADSB_OUT_IDENT:
+        if ((AP::ADSB() != nullptr) && AP::ADSB()->ident_start()) {
             result = MAV_RESULT_ACCEPTED;
-        } else {
+        }
+        else {
             result = MAV_RESULT_FAILED;
         }
-#else
-        result = MAV_RESULT_UNSUPPORTED;
-#endif
         break;
+#endif
 
     case MAV_CMD_PREFLIGHT_UAVCAN:
         result = handle_command_preflight_can(packet);
@@ -4709,7 +4732,7 @@ void GCS_MAVLINK::send_sys_status()
     if (!gcs().vehicle_initialised()) {
         return;
     }
-
+#if !defined(HAL_BUILD_AP_PERIPH) || defined(HAL_PERIPH_ENABLE_BATTERY)
     const AP_BattMonitor &battery = AP::battery();
     float battery_current;
     const int8_t battery_remaining = battery_remaining_pct(AP_BATT_PRIMARY_INSTANCE);
@@ -4719,6 +4742,7 @@ void GCS_MAVLINK::send_sys_status()
     } else {
         battery_current = -1;
     }
+#endif
 
     uint32_t control_sensors_present;
     uint32_t control_sensors_enabled;
@@ -4737,9 +4761,15 @@ void GCS_MAVLINK::send_sys_status()
         control_sensors_enabled,
         control_sensors_health,
         static_cast<uint16_t>(AP::scheduler().load_average() * 1000),
+#if !defined(HAL_BUILD_AP_PERIPH) || defined(HAL_PERIPH_ENABLE_BATTERY)
         battery.voltage() * 1000,  // mV
         battery_current,        // in 10mA units
         battery_remaining,      // in %
+#else
+        0,
+        -1,
+        -1,
+#endif
         0,  // comm drops %,
         0,  // comm drops in pkts,
         errors1,
@@ -4929,8 +4959,19 @@ void GCS_MAVLINK::send_water_depth() const
             ahrs.get_roll(),    // roll in radians
             ahrs.get_pitch(),   // pitch in radians
             ahrs.get_yaw(),     // yaw in radians
-            s->distance_cm() * 0.01f,    // distance in meters
+            s->distance(),    // distance in meters
             temp_C);            // temperature in degC
+    }
+
+#endif
+}
+
+void GCS_MAVLINK::send_uavionix_adsb_out_status() const
+{
+#if HAL_ADSB_ENABLED
+    AP_ADSB *adsb = AP::ADSB();
+    if (adsb != nullptr) {
+        adsb->send_adsb_out_status(chan);
     }
 #endif
 }
@@ -5256,6 +5297,11 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
 #endif // HAL_HIGH_LATENCY2_ENABLED
         break;
 
+
+    case MSG_UAVIONIX_ADSB_OUT_STATUS:
+        CHECK_PAYLOAD_SIZE(UAVIONIX_ADSB_OUT_STATUS);
+        send_uavionix_adsb_out_status();
+        break;
 
     default:
         // try_send_message must always at some stage return true for
@@ -5804,14 +5850,9 @@ void GCS_MAVLINK::send_high_latency2() const
     AP_AHRS &ahrs = AP::ahrs();
     Location global_position_current;
     UNUSED_RESULT(ahrs.get_position(global_position_current));
-
-    const AP_BattMonitor &battery = AP::battery();
-    float battery_current = -1;
+#if !defined(HAL_BUILD_AP_PERIPH) || defined(HAL_PERIPH_ENABLE_BATTERY)
     const int8_t battery_remaining = battery_remaining_pct(AP_BATT_PRIMARY_INSTANCE);
-
-    if (battery.healthy() && battery.current_amps(battery_current)) {
-        battery_current = constrain_float(battery_current * 100,-INT16_MAX,INT16_MAX);
-    }
+#endif
 
     AP_Mission *mission = AP::mission();
     uint16_t current_waypoint = 0;
@@ -5872,7 +5913,11 @@ void GCS_MAVLINK::send_high_latency2() const
         0, // [dm] Maximum error vertical position since last message
         high_latency_air_temperature(), // [degC] Air temperature from airspeed sensor
         0, // [dm/s] Maximum climb rate magnitude since last message
+#if !defined(HAL_BUILD_AP_PERIPH) || defined(HAL_PERIPH_ENABLE_BATTERY)
         battery_remaining, // [%] Battery level (-1 if field not provided).
+#else
+        -1,
+#endif
         current_waypoint, // Current waypoint number
         failure_flags, // Bitmap of failure flags.
         base_mode(), // Field for custom payload. base mode (arming status) in ArduPilot's case

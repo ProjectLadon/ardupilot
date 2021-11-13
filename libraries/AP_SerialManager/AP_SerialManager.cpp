@@ -417,6 +417,9 @@ void AP_SerialManager::init()
             set_options(i);
             switch (state[i].protocol) {
                 case SerialProtocol_None:
+                    // disable RX and TX pins in case they are shared
+                    // with another peripheral (eg. RCIN pin)
+                    uart->disable_rxtx();
                     break;
                 case SerialProtocol_Console:
                 case SerialProtocol_MAVLink:
@@ -456,7 +459,7 @@ void AP_SerialManager::init()
                                          AP_SERIALMANAGER_SToRM32_BUFSIZE_RX,
                                          AP_SERIALMANAGER_SToRM32_BUFSIZE_TX);
                     break;
-                case SerialProtocol_Aerotenna_uLanding:
+                case SerialProtocol_Aerotenna_USD1:
                     state[i].protocol.set_and_save(SerialProtocol_Rangefinder);
                     break;
                 case SerialProtocol_Volz:
@@ -481,7 +484,7 @@ void AP_SerialManager::init()
 
                 case SerialProtocol_ESCTelemetry:
                     // ESC telemetry protocol from BLHeli32 ESCs. Note that baudrate is hardcoded to 115200
-                    state[i].baud = 115200;
+                    state[i].baud = 115200 / 1000;
                     uart->begin(map_baudrate(state[i].baud), 30, 30);
                     uart->set_flow_control(AP_HAL::UARTDriver::FLOW_CONTROL_DISABLE);
                     break;

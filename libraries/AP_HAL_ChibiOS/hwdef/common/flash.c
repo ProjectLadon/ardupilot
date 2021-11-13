@@ -145,6 +145,10 @@ static const uint32_t flash_memmap[STM32_FLASH_NPAGES] = { KB(32), KB(32), KB(32
 static_assert(STORAGE_FLASH_PAGE < STM32_FLASH_NPAGES,
               "STORAGE_FLASH_PAGE out of range");
 #endif
+#ifdef HAL_CRASH_DUMP_FLASH_PAGE
+static_assert(HAL_CRASH_DUMP_FLASH_PAGE < STM32_FLASH_NPAGES,
+              "HAL_CRASH_DUMP_FLASH_PAGE out of range");
+#endif
 #endif
 
 // keep a cache of the page addresses
@@ -548,7 +552,7 @@ static bool stm32_flash_write_f4f7(uint32_t addr, const void *buf, uint32_t coun
         return false;
     }
 
-    if ((addr+count) >= STM32_FLASH_BASE+STM32_FLASH_SIZE) {
+    if ((addr+count) > STM32_FLASH_BASE+STM32_FLASH_SIZE) {
         return false;
     }
 
@@ -649,7 +653,7 @@ static bool stm32_flash_write_f1(uint32_t addr, const void *buf, uint32_t count)
         return false;
     }
 
-    if ((addr+count) >= STM32_FLASH_BASE+STM32_FLASH_SIZE) {
+    if ((addr+count) > STM32_FLASH_BASE+STM32_FLASH_SIZE) {
         _flash_fail_line = __LINE__;
         return false;
     }
@@ -711,7 +715,7 @@ static bool stm32_flash_write_g4(uint32_t addr, const void *buf, uint32_t count)
         return false;
     }
 
-    if ((addr+count) >= STM32_FLASH_BASE+STM32_FLASH_SIZE) {
+    if ((addr+count) > STM32_FLASH_BASE+STM32_FLASH_SIZE) {
         _flash_fail_line = __LINE__;
         return false;
     }

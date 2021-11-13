@@ -164,6 +164,8 @@ void RC_Channel_Plane::init_aux_function(const RC_Channel::aux_func_t ch_option,
     case AUX_FUNC::ARMDISARM_AIRMODE:
 #endif
     case AUX_FUNC::TRIM_TO_CURRENT_SERVO_RC:
+    case AUX_FUNC::EMERGENCY_LANDING_EN:
+    case AUX_FUNC::FW_AUTOTUNE:
         break;
 
     case AUX_FUNC::SOARING:
@@ -354,6 +356,22 @@ case AUX_FUNC::ARSPD_CALIBRATE:
         }
         break;
 
+    case AUX_FUNC::EMERGENCY_LANDING_EN:
+        switch (ch_flag) {
+        case AuxSwitchPos::HIGH:
+            plane.emergency_landing = true;
+            break;
+        case AuxSwitchPos::MIDDLE:
+            break;
+        case AuxSwitchPos::LOW:
+            plane.emergency_landing = false;
+            break;
+        }
+        break;
+
+    case AUX_FUNC::FW_AUTOTUNE:
+        plane.autotune_enable(ch_flag == AuxSwitchPos::HIGH);
+        break;
 
     default:
         return RC_Channel::do_aux_function(ch_option, ch_flag);

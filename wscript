@@ -511,7 +511,7 @@ def configure(cfg):
 
 def generate_canard_dsdlc(cfg):
     dsdlc_gen_path = cfg.bldnode.make_node('modules/libcanard/dsdlc_generated').abspath()
-    src = cfg.srcnode.ant_glob('modules/pyuavcan/uavcan/dsdl_files/* libraries/AP_UAVCAN/dsdl/*', dir=True, src=False)
+    src = cfg.srcnode.ant_glob('modules/DroneCAN/DSDL/* libraries/AP_UAVCAN/dsdl/*', dir=True, src=False)
     dsdlc_path = cfg.srcnode.make_node('modules/canard_dsdlc/canard_dsdlc.py').abspath()
     if not os.path.exists(dsdlc_path):
         print("Please update submodules with: git submodule update --recursive --init")
@@ -620,7 +620,7 @@ def _build_dynamic_sources(bld):
     if (bld.get_board().with_can or bld.env.HAL_NUM_CAN_IFACES) and not bld.env.AP_PERIPH:
         bld(
             features='uavcangen',
-            source=bld.srcnode.ant_glob('modules/uavcan/dsdl/* libraries/AP_UAVCAN/dsdl/*', dir=True, src=False),
+            source=bld.srcnode.ant_glob('modules/DroneCAN/DSDL/*', dir=True, src=False),
             output_dir='modules/uavcan/libuavcan/include/dsdlc_generated',
             name='uavcan',
             export_includes=[

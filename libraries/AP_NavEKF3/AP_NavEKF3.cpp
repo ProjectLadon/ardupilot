@@ -15,7 +15,7 @@
   APM_BUILD_DIRECTORY is taken from the main vehicle directory name
   where the code is built.
  */
-#if APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_Replay)
+#if APM_BUILD_COPTER_OR_HELI || APM_BUILD_TYPE(APM_BUILD_Replay)
 // copter defaults
 #define VELNE_M_NSE_DEFAULT     0.3f
 #define VELD_M_NSE_DEFAULT      0.5f
@@ -968,7 +968,7 @@ void NavEKF3::UpdateFilter(void)
     }
 
     const uint8_t user_primary = uint8_t(_primary_core) < num_cores? _primary_core : 0;
-    if (primary != 0 && core[user_primary].healthy() && !armed) {
+    if (primary != user_primary && core[user_primary].healthy() && !armed) {
         // when on the ground and disarmed force the selected primary
         // core. This avoids us ending with with a lottery for which
         // IMU is used in each flight. Otherwise the alignment of the
@@ -2014,4 +2014,13 @@ bool NavEKF3::isVibrationAffected(int8_t instance) const
         return core[instance].isVibrationAffected();
     }
     return false;
+}
+
+// get a yaw estimator instance
+const EKFGSF_yaw *NavEKF3::get_yawEstimator(void) const
+{
+    if (core) {
+        return core[primary].get_yawEstimator();
+    }
+    return nullptr;
 }

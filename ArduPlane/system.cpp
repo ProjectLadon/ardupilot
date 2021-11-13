@@ -86,11 +86,6 @@ void Plane::init_ardupilot()
     AP::compass().set_log_bit(MASK_LOG_COMPASS);
     AP::compass().init();
 
-// init EFI monitoring
-#if HAL_EFI_ENABLED
-    g2.efi.init();
-#endif
-
     // GPS Initialization
     gps.set_log_gps_bit(MASK_LOG_GPS);
     gps.init(serial_manager);
@@ -448,7 +443,7 @@ int8_t Plane::throttle_percentage(void)
 {
 #if HAL_QUADPLANE_ENABLED
     if (quadplane.in_vtol_mode() && !quadplane.tailsitter.in_vtol_transition()) {
-        return quadplane.throttle_percentage();
+        return quadplane.motors->get_throttle_out() * 100.0;
     }
 #endif
     float throttle = SRV_Channels::get_output_scaled(SRV_Channel::k_throttle);

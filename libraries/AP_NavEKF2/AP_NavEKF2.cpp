@@ -11,7 +11,7 @@
   APM_BUILD_DIRECTORY is taken from the main vehicle directory name
   where the code is built.
  */
-#if APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_Replay)
+#if APM_BUILD_COPTER_OR_HELI || APM_BUILD_TYPE(APM_BUILD_Replay)
 // copter defaults
 #define VELNE_M_NSE_DEFAULT     0.3f
 #define VELD_M_NSE_DEFAULT      0.5f
@@ -1594,4 +1594,13 @@ void NavEKF2::writeExtNavVelData(const Vector3f &vel, float err, uint32_t timeSt
             core[i].writeExtNavVelData(vel, err, timeStamp_ms, delay_ms);
         }
     }
+}
+
+// get a yaw estimator instance
+const EKFGSF_yaw *NavEKF2::get_yawEstimator(void) const
+{
+    if (core) {
+        return core[primary].get_yawEstimator();
+    }
+    return nullptr;
 }

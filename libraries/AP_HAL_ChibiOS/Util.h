@@ -96,6 +96,9 @@ public:
     // returns true random values
     bool get_true_random_vals(uint8_t* data, size_t size, uint32_t timeout_us) override;
 
+    // set armed state
+    void set_soft_armed(const bool b) override;
+
 private:
 #ifdef HAL_PWM_ALARM
     struct ToneAlarmPwmGroup {
@@ -135,4 +138,10 @@ private:
 
     // log info on stack usage
     void log_stack_info(void) override;
+
+#if defined(HAL_CRASH_DUMP_FLASHPAGE) && !defined(HAL_BOOTLOADER_BUILD)
+    // get last crash dump
+    void last_crash_dump(ExpandingString &str) const override;
+#endif
+
 };

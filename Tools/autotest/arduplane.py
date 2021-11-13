@@ -534,7 +534,7 @@ class AutoTestPlane(AutoTest):
         self.wait_waypoint(1, num_wp, max_dist=60, timeout=mission_timeout)
         self.wait_groundspeed(0, 0.5, timeout=mission_timeout)
         if quadplane:
-            self.wait_statustext("Throttle disarmed", timeout=70)
+            self.wait_statustext("Throttle disarmed", timeout=200)
         else:
             self.wait_statustext("Auto disarmed", timeout=60)
         self.progress("Mission OK")
@@ -2147,6 +2147,8 @@ class AutoTestPlane(AutoTest):
         self.progress("Waiting for thermal")
         self.wait_mode('THERMAL', timeout=600)
 
+        self.set_parameter("SOAR_VSPEED", 0.6)
+
         # Wait to climb to SOAR_ALT_MAX
         self.progress("Waiting for climb to max altitude")
         alt_max = self.get_parameter('SOAR_ALT_MAX')
@@ -2991,6 +2993,10 @@ class AutoTestPlane(AutoTest):
             quadplane = self.get_parameter('Q_ENABLE')
             if quadplane:
                 mission_file = "basic-quadplane.txt"
+            tailsitter = self.get_parameter('Q_TAILSIT_ENABLE')
+            if tailsitter:
+                # tailsitter needs extra re-boot to pick up the rotated AHRS view
+                self.reboot_sitl()
             self.wait_ready_to_arm()
             self.arm_vehicle()
             self.fly_mission(mission_file, strict=False, quadplane=quadplane, mission_timeout=400.0)
@@ -3143,14 +3149,18 @@ class AutoTestPlane(AutoTest):
         self.fly_mission("ap-circuit.txt", mission_timeout=1200)
 
     def DCMFallback(self):
+        self.reboot_sitl()
+        self.delay_sim_time(30)
         self.wait_ready_to_arm()
         self.arm_vehicle()
 
         self.takeoff(50)
+        self.change_mode('CIRCLE')
         self.context_collect('STATUSTEXT')
-        self.set_parameter("EK3_POS_I_GATE", 25)
+        self.set_parameter("EK3_POS_I_GATE", 0)
         self.set_parameter("SIM_GPS_HZ", 1)
-        self.wait_statustext("DCM Active", check_context=True)
+        self.set_parameter("GPS_DELAY_MS", 300)
+        self.wait_statustext("DCM Active", check_context=True, timeout=60)
         self.wait_statustext("EKF3 Active", check_context=True)
         self.wait_statustext("DCM Active", check_context=True)
         self.wait_statustext("EKF3 Active", check_context=True)

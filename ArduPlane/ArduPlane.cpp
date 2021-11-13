@@ -113,9 +113,6 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
 #if LANDING_GEAR_ENABLED == ENABLED
     SCHED_TASK(landing_gear_update, 5, 50),
 #endif
-#if HAL_EFI_ENABLED
-    SCHED_TASK(efi_update,             10,    200),
-#endif
 };
 
 void Plane::get_scheduler_tasks(const AP_Scheduler::Task *&tasks,
@@ -183,7 +180,7 @@ void Plane::update_speed_height(void)
 	    // Call TECS 50Hz update. Note that we call this regardless of
 	    // throttle suppressed, as this needs to be running for
 	    // takeoff detection
-        SpdHgt_Controller->update_50hz();
+        TECS_controller.update_50hz();
     }
 
 #if HAL_QUADPLANE_ENABLED
@@ -335,13 +332,6 @@ void Plane::compass_save()
          */
         compass.save_offsets();
     }
-}
-
-void Plane::efi_update(void)
-{
-#if HAL_EFI_ENABLED
-    g2.efi.update();
-#endif
 }
 
 #if AP_AIRSPEED_AUTOCAL_ENABLE
@@ -535,7 +525,7 @@ void Plane::update_alt()
             target_alt = MAX(target_alt, prev_WP_loc.alt - home.alt) + (g2.rtl_climb_min+10)*100;
         }
 
-        SpdHgt_Controller->update_pitch_throttle(target_alt,
+        TECS_controller.update_pitch_throttle(target_alt,
                                                  target_airspeed_cm,
                                                  flight_stage,
                                                  distance_beyond_land_wp,

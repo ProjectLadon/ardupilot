@@ -2008,6 +2008,7 @@ class AutoTestCopter(AutoTest):
         rlld = self.get_parameter("ATC_RAT_RLL_D")
         rlli = self.get_parameter("ATC_RAT_RLL_I")
         rllp = self.get_parameter("ATC_RAT_RLL_P")
+        self.set_parameter("ATC_RAT_RLL_SMAX", 1)
         self.takeoff(10)
 
         # hold position in loiter
@@ -5286,6 +5287,14 @@ class AutoTestCopter(AutoTest):
         self.context_push()
         self.set_parameter("GPS_TYPE", 2)
         self.set_parameter("SIM_GPS_DISABLE", 1)
+        # if there is no GPS at all then we must direct EK3 to not use
+        # it at all.  Otherwise it will never initialise, as it wants
+        # to calculate the lag and size its delay buffers accordingly.
+        self.set_parameters({
+            "EK3_SRC1_POSXY": 0,
+            "EK3_SRC1_VELZ": 0,
+            "EK3_SRC1_VELXY": 0,
+        })
         self.reboot_sitl()
 
         # check for expected EKF flags
@@ -6270,7 +6279,21 @@ class AutoTestCopter(AutoTest):
 
             self.progress("Landing gear should deploy with current_distance below min_distance")
             self.change_mode('STABILIZE')
-            self.wait_ready_to_arm()
+            timeout = 60
+            tstart = self.get_sim_time()
+            while not self.sensor_has_state(mavutil.mavlink.MAV_SYS_STATUS_PREARM_CHECK, True, True, True):
+                if self.get_sim_time() - tstart > timeout:
+                    raise NotAchievedException("Failed to become armable after %f seconds" % timeout)
+                self.mav.mav.distance_sensor_send(
+                    0,  # time_boot_ms
+                    100, # min_distance (cm)
+                    2500, # max_distance (cm)
+                    200, # current_distance (cm)
+                    mavutil.mavlink.MAV_DISTANCE_SENSOR_LASER, # type
+                    21, # id
+                    mavutil.mavlink.MAV_SENSOR_ROTATION_PITCH_270, # orientation
+                    255  # covariance
+                )
             self.arm_vehicle()
             self.set_parameter("SERVO10_FUNCTION", 29)
             self.set_parameter("LGR_DEPLOY_ALT", 1)
@@ -6289,16 +6312,6 @@ class AutoTestCopter(AutoTest):
                 0
             )
 
-            self.mav.mav.distance_sensor_send(
-                0,  # time_boot_ms
-                100, # min_distance (cm)
-                2500, # max_distance (cm)
-                200, # current_distance (cm)
-                mavutil.mavlink.MAV_DISTANCE_SENSOR_LASER, # type
-                21, # id
-                mavutil.mavlink.MAV_SENSOR_ROTATION_PITCH_270, # orientation
-                255  # covariance
-            )
             self.context_collect("STATUSTEXT")
             tstart = self.get_sim_time()
             while True:
@@ -6511,8 +6524,8 @@ class AutoTestCopter(AutoTest):
         drivers = [
             ("lightwareserial", 8),  # autodetected between this and -binary
             ("lightwareserial-binary", 8),
-            ("ulanding_v0", 11),
-            ("ulanding_v1", 11),
+            ("USD1_v0", 11),
+            ("USD1_v1", 11),
             ("leddarone", 12),
             ("maxsonarseriallv", 13),
             ("nmea", 17),
@@ -6528,6 +6541,7 @@ class AutoTestCopter(AutoTest):
             do_drivers = drivers[0:3]
             drivers = drivers[3:]
             command_line_args = []
+            self.context_push()
             for (offs, cmdline_argument, serial_num) in [(0, '--uartE', 4),
                                                          (1, '--uartF', 5),
                                                          (2, '--uartG', 6)]:
@@ -6540,6 +6554,7 @@ class AutoTestCopter(AutoTest):
                     self.set_parameter("RNGFND%u_TYPE" % (offs+1), rngfnd_param_value)
             self.customise_SITL_commandline(command_line_args)
             self.fly_rangefinder_drivers_fly([x[0] for x in do_drivers])
+            self.context_pop()
 
         self.fly_rangefinder_mavlink()
 
@@ -7329,6 +7344,7 @@ class AutoTestCopter(AutoTest):
         self.do_RTL()
 
     def GPSForYaw(self):
+        self.context_push()
         self.load_default_params_file("copter-gps-for-yaw.parm")
         self.reboot_sitl()
         ex = None
@@ -7336,12 +7352,18 @@ class AutoTestCopter(AutoTest):
             self.wait_gps_fix_type_gte(6, message_type="GPS2_RAW", verbose=True)
             m = self.assert_receive_message("GPS2_RAW")
             self.progress(self.dump_message_verbose(m))
-            if m.yaw == 0:
-                raise NotAchievedException("Expected to get GPS-from-yaw")
+            want = 27000
+            if abs(m.yaw - want) > 500:
+                raise NotAchievedException("Expected to get GPS-from-yaw (want %f got %f)" % (want, m.yaw))
             self.wait_ready_to_arm()
         except Exception as e:
             self.print_exception_caught(e)
             ex = e
+
+        self.context_pop()
+
+        self.reboot_sitl()
+
         if ex is not None:
             raise ex
 
@@ -7372,21 +7394,24 @@ class AutoTestCopter(AutoTest):
         for mot_id_to_kill in 1, 2:
             self.progress("Turning ESC=%u off" % mot_id_to_kill)
             self.set_parameter("SIM_FTOWESC_POW", mask & ~(1 << mot_id_to_kill))
-            self.assert_prearm_failure("are not sending tel")
+            self.delay_sim_time(1)
+            self.assert_prearm_failure("are not running")
             self.progress("Turning it back on")
             self.set_parameter("SIM_FTOWESC_POW", mask)
             self.wait_ready_to_arm()
 
             self.progress("Turning ESC=%u off (again)" % mot_id_to_kill)
             self.set_parameter("SIM_FTOWESC_POW", mask & ~(1 << mot_id_to_kill))
-            self.assert_prearm_failure("are not sending tel")
+            self.delay_sim_time(1)
+            self.assert_prearm_failure("are not running")
             self.progress("Turning it back on")
             self.set_parameter("SIM_FTOWESC_POW", mask)
             self.wait_ready_to_arm()
 
         self.progress("Turning all ESCs off")
         self.set_parameter("SIM_FTOWESC_POW", 0)
-        self.assert_prearm_failure("are not sending tel")
+        self.delay_sim_time(1)
+        self.assert_prearm_failure("are not running")
         self.progress("Turning them back on")
         self.set_parameter("SIM_FTOWESC_POW", mask)
         self.wait_ready_to_arm()
@@ -8003,6 +8028,8 @@ class AutoTestCopter(AutoTest):
             "Parachute": "See https://github.com/ArduPilot/ardupilot/issues/4702",
             "HorizontalAvoidFence": "See https://github.com/ArduPilot/ardupilot/issues/11525",
             "AltEstimation": "See https://github.com/ArduPilot/ardupilot/issues/15191",
+            "GroundEffectCompensation_takeOffExpected": "Flapping",
+            "GroundEffectCompensation_touchDownExpected": "Flapping",
         }
 
 

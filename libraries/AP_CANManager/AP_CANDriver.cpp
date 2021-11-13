@@ -32,7 +32,6 @@ const AP_Param::GroupInfo AP_CANManager::CANDriver_Params::var_info[] = {
     // @Param: PROTOCOL
     // @DisplayName: Enable use of specific protocol over virtual driver
     // @Description: Enabling this option starts selected protocol that will use this virtual driver
-    // @Values{Copter,Plane,Sub,Rover}: 0:Disabled,1:UAVCAN,3:ToshibaCAN,4:PiccoloCAN,5:CANTester,8:KDECAN,9:PacketDigitalCAN
     // @Values: 0:Disabled,1:UAVCAN,3:ToshibaCAN,4:PiccoloCAN,5:CANTester,6:EFI_NWPMU,7:USD1,8:KDECAN,9:PacketDigital,10:Scripting
     // @User: Advanced
     // @RebootRequired: True
@@ -42,7 +41,7 @@ const AP_Param::GroupInfo AP_CANManager::CANDriver_Params::var_info[] = {
     // @Path: ../AP_UAVCAN/AP_UAVCAN.cpp
     AP_SUBGROUPPTR(_uavcan, "UC_", 2, AP_CANManager::CANDriver_Params, AP_UAVCAN),
 
-#if (APM_BUILD_COPTER_OR_HELI() || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub))
+#if (APM_BUILD_COPTER_OR_HELI || APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_TYPE(APM_BUILD_ArduSub))
     // @Group: KDE_
     // @Path: ../AP_KDECAN/AP_KDECAN.cpp
     AP_SUBGROUPPTR(_kdecan, "KDE_", 3, AP_CANManager::CANDriver_Params, AP_KDECAN),
