@@ -139,6 +139,8 @@ private:
     AP_Float loit_radius;
     AP_Float diff_steer_mult;
     AP_Float wind_angle_rad;
+    AP_Int32 tack_timeout_ms;
+    AP_Int32 tack_retry_ms;
 
     RC_Channel *channel_mainsail;   // rc input channel for controlling mainsail
     RC_Channel *channel_differential;   // rc input channel for controlling sail differential

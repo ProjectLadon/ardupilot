@@ -1,6 +1,12 @@
 #include "mode.h"
 #include "Rover.h"
 
+// definitions for WPNV label
+#define WPNV_LABELS ("TimeUS,DistToWP,WPBearing,DesSpeed,DesHeading,DesTurnRate,Tacking,Indirect")
+#define WPNV_UNITS  ("smhnhk--")     // seconds, meters, deg heading, m/s, deg heading, deg/s, flag, flag
+#define WPNV_MULTS  ("F0B0B000")     // 1e-6, 1, 1e-2, 1, 1e-2, 1, 1, 1
+#define WPNV_TYPES  ("QfffffBB")     // uint64_t, float, float, float, float, float, uint8_t, uint8_t
+
 Mode::Mode() :
     ahrs(rover.ahrs),
     g(rover.g),
@@ -459,6 +465,18 @@ void Mode::navigate_to_waypoint()
         // use pivot turn rate for tacks
         const float turn_rate = g2.sailboat.tacking() ? g2.wp_nav.get_pivot_rate() : 0.0f;
         calc_steering_to_heading(desired_heading_cd, turn_rate);
+        AP::logger().Write(
+            //  ("TimeUS,DistToWP,WPBearing,DesSpeed,DesHeading,DesTurnRate,Tacking,Indirect")
+            "WPNV", WPNV_LABELS, WPNV_UNITS, WPNV_MULTS, WPNV_TYPES,
+            AP_HAL::micros64(),
+            (double)_distance_to_destination,
+            (double)g2.wp_nav.oa_wp_bearing_cd(),
+            (double)desired_speed,
+            (double)desired_heading_cd,
+            (double)turn_rate,
+            (uint8_t)g2.sailboat.tacking(),
+            1
+        );
     } else {
         // retrieve turn rate from waypoint controller
         float desired_turn_rate_rads = g2.wp_nav.get_turn_rate_rads();
@@ -470,6 +488,18 @@ void Mode::navigate_to_waypoint()
 
         // call turn rate steering controller
         calc_steering_from_turn_rate(desired_turn_rate_rads);
+        AP::logger().Write(
+            //  ("TimeUS,DistToWP,WPBearing,DesSpeed,DesHeading,DesTurnRate,Tacking,Indirect")
+            "WPNV", WPNV_LABELS, WPNV_UNITS, WPNV_MULTS, WPNV_TYPES,
+            AP_HAL::micros64(),
+            (double)_distance_to_destination,
+            (double)g2.wp_nav.oa_wp_bearing_cd(),
+            (double)desired_speed,
+            (double)desired_heading_cd,
+            (double)degrees(desired_turn_rate_rads),
+            (uint8_t)g2.sailboat.tacking(),
+            0
+        );
     }
 
     calc_and_set_roll_pitch();

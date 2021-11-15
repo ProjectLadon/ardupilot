@@ -1,9 +1,7 @@
 #include "Rover.h"
 
-#define SAILBOAT_AUTO_TACKING_TIMEOUT_MS 5000   // tacks in auto mode timeout if not successfully completed within this many milliseconds
 #define SAILBOAT_TACKING_ACCURACY_DEG 10        // tack is considered complete when vehicle is within this many degrees of target tack angle
 #define SAILBOAT_NOGO_PAD 10                    // deg, the no go zone is padded by this much when deciding if we should use the Sailboat heading controller
-#define TACK_RETRY_TIME_MS 5000                 // Can only try another auto mode tack this many milliseconds after the last is cleared (either competed or timed-out)
 /*
 To Do List
  - Improve tacking in light winds and bearing away in strong wings
@@ -19,6 +17,12 @@ To Do List
  - tack on depth sounder info to stop sailing into shallow water on indirect sailing routes
  - add option to do proper tacks, ie tacking on flat spot in the waves, or only try once at a certain speed, or some better method than just changing the desired heading suddenly
 */
+
+// definitions for TACK dataflash log
+#define TACK_LABELS ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReqMS,XtrackErr,CurrTacking,CmdHeading")
+#define TACK_UNITS ("sh---sm-h") // seconds, deg heading, flag, flag, flag, flag, meters, flag, deg heading
+#define TACK_MULTS ("FB000C00B") // 1e-6, 1e-2, 1, 1, 1, 1e-3, 1, 1, 1e-2
+#define TACK_TYPES ("QfBBBffBf") // uint64_t, float, uint8_t, uint8_t, uint8_t, uint8_t, float, uint8_t, float
 
 const AP_Param::GroupInfo Sailboat::var_info[] = {
 
@@ -110,6 +114,25 @@ const AP_Param::GroupInfo Sailboat::var_info[] = {
     // @Increment: 1
     // @User: Standard
     AP_GROUPINFO("DIFF_K", 10, Sailboat, diff_steer_mult, 100),
+
+    // @Param TACK_TO
+    // @DisplayName Tacking timeout (ms)
+    // @Description This controls how long the boat will continue to attempt to tack before giving up
+    // @Units: ms
+    // @Range: 0 1000000
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("TACK_TO", 11, Sailboat, tack_timeout_ms, 5000),
+
+    // @Param TACK_RTR
+    // @DisplayName Tacking retry (ms)
+    // @Description This controls how long the boat will wait before retrying a failed tack
+    // @Units: ms
+    // @Range: 0 1000000
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("TACK_RTR", 12, Sailboat, tack_retry_ms, 5000),
+
 
     AP_GROUPEND
 };
@@ -455,7 +478,7 @@ void Sailboat::handle_tack_request_acro()
 float Sailboat::get_tack_heading_rad()
 {
     if (fabsf(wrap_PI(tack_heading_rad - rover.ahrs.yaw)) < radians(SAILBOAT_TACKING_ACCURACY_DEG) ||
-       ((AP_HAL::millis() - tack_request_ms) > SAILBOAT_AUTO_TACKING_TIMEOUT_MS)) {
+       ((AP_HAL::millis() - tack_request_ms) > (uint32_t)tack_timeout_ms)) {
         clear_tack();
     }
 
@@ -514,6 +537,14 @@ bool Sailboat::use_indirect_route(float desired_heading_cd) const
 float Sailboat::calc_heading(float desired_heading_cd)
 {
     if (!tack_enabled()) {
+        AP::logger().Write(
+            // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,CurrTacking,CmdHeading")
+            "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
+            AP_HAL::micros64(),
+            (double)desired_heading_cd,
+            -1, -1, -1, -1, -1, -1,
+            (double)desired_heading_cd
+        );
         return desired_heading_cd;
     }
     bool should_tack = false;
@@ -550,6 +581,19 @@ float Sailboat::calc_heading(float desired_heading_cd)
         }
 
         if (!should_tack) {
+            AP::logger().Write(
+                // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,CurrTacking,CmdHeading")
+                "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
+                AP_HAL::micros64(),
+                (double)desired_heading_cd,
+                (uint8_t)current_tack,
+                (uint8_t)new_tack,
+                (uint8_t)should_tack,
+                (float)tack_request_ms,
+                (float)rover.g2.wp_nav.crosstrack_error(),
+                (uint8_t)currently_tacking,
+                (double)desired_heading_cd
+            );
             return desired_heading_cd;
         }
     }
@@ -582,7 +626,7 @@ float Sailboat::calc_heading(float desired_heading_cd)
     const float right_no_go_heading_rad = wrap_2PI(true_wind_rad - radians(sail_no_go));
 
     // if tack triggered, calculate target heading
-    if (should_tack && (now - tack_clear_ms) > TACK_RETRY_TIME_MS) {
+    if (should_tack && (now - tack_clear_ms) > (uint32_t)tack_retry_ms) {
         gcs().send_text(MAV_SEVERITY_INFO, "Sailboat: Tacking");
         // calculate target heading for the new tack
         switch (current_tack) {
@@ -602,9 +646,9 @@ float Sailboat::calc_heading(float desired_heading_cd)
         // check if we have reached target
         if (fabsf(wrap_PI(tack_heading_rad - rover.ahrs.yaw)) <= radians(SAILBOAT_TACKING_ACCURACY_DEG)) {
             clear_tack();
-        } else if ((now - auto_tack_start_ms) > SAILBOAT_AUTO_TACKING_TIMEOUT_MS) {
+        } else if ((now - auto_tack_start_ms) > (uint32_t)tack_timeout_ms) {
             // tack has taken too long
-            if ((motor_state == UseMotor::USE_MOTOR_ASSIST) && (now - auto_tack_start_ms) < (3.0f * SAILBOAT_AUTO_TACKING_TIMEOUT_MS)) {
+            if ((motor_state == UseMotor::USE_MOTOR_ASSIST) && (now - auto_tack_start_ms) < (3.0f * (uint32_t)tack_timeout_ms)) {
                 // if we have throttle available use it for another two time periods to get the tack done
                 tack_assist = true;
             } else {
@@ -613,13 +657,52 @@ float Sailboat::calc_heading(float desired_heading_cd)
             }
         }
         // return tack target heading
+        AP::logger().Write(
+            // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,CurrTacking,CmdHeading")
+            "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
+            AP_HAL::micros64(),
+            (double)desired_heading_cd,
+            (uint8_t)current_tack,
+            -1,
+            (uint8_t)should_tack,
+            (float)tack_request_ms,
+            (float)rover.g2.wp_nav.crosstrack_error(),
+            (uint8_t)currently_tacking,
+            (double)(degrees(tack_heading_rad) * 100.0f)
+        );
         return degrees(tack_heading_rad) * 100.0f;
     }
 
     // return the correct heading for our current tack
     if (current_tack == AP_WindVane::Sailboat_Tack::TACK_PORT) {
+        AP::logger().Write(
+            // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,CurrTacking,CmdHeading")
+            "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
+            AP_HAL::micros64(),
+            (double)desired_heading_cd,
+            (uint8_t)current_tack,
+            -1,
+            (uint8_t)should_tack,
+            (float)tack_request_ms,
+            (float)rover.g2.wp_nav.crosstrack_error(),
+            (uint8_t)currently_tacking,
+            (double)(degrees(left_no_go_heading_rad) * 100.0f)
+        );
         return degrees(left_no_go_heading_rad) * 100.0f;
     } else {
+        AP::logger().Write(
+            // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,CurrTacking,CmdHeading")
+            "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
+            AP_HAL::micros64(),
+            (double)desired_heading_cd,
+            (uint8_t)current_tack,
+            -1,
+            (uint8_t)should_tack,
+            (float)tack_request_ms,
+            (float)rover.g2.wp_nav.crosstrack_error(),
+            (uint8_t)currently_tacking,
+            (double)(degrees(right_no_go_heading_rad) * 100.0f)
+        );
         return degrees(right_no_go_heading_rad) * 100.0f;
     }
 }
