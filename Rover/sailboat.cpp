@@ -546,12 +546,12 @@ void Sailboat::tack_report(float desired_heading_cd)
 
 void Sailboat::tack_report(
     float       desired_heading_cd,
-    int8_t      current_tack,
+    int8_t      curr_tack,
     int8_t      new_tack,
     int8_t      should_tack,
-    float       tack_request_ms,
+    float       tack_req_ms,
     float       crosstrack_error,
-    int8_t      currently_tacking,
+    int8_t      curr_tacking,
     float       command_heading
 )
 {
@@ -561,13 +561,14 @@ void Sailboat::tack_report(
         "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
         AP_HAL::micros64(),
         (double)desired_heading_cd,
-        current_tack,
+        curr_tack,
         new_tack,
         should_tack,
-        (double)tack_request_ms,
+        (double)tack_req_ms,
         (double)crosstrack_error,
-        currently_tacking,
+        curr_tacking,
         (double)command_heading
+    );
 }
 
 // if we can't sail on the desired heading then we should pick the best heading that we can sail on
