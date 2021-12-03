@@ -2,7 +2,7 @@
 #include "Rover.h"
 
 // definitions for WPNV label
-#define WPNV_LABELS ("TimeUS,DistToWP,WPBearing,DesSpeed,DesHeading,DesTurnRate,Tacking,Indirect")
+#define WPNV_LABELS ("TimeUS,WPDist,WPBear,DesSpd,DesHdg,DesRate,Tckng,Indrct")
 #define WPNV_UNITS  ("smhnhk--")     // seconds, meters, deg heading, m/s, deg heading, deg/s, flag, flag
 #define WPNV_MULTS  ("F0B0B000")     // 1e-6, 1, 1e-2, 1, 1e-2, 1, 1, 1
 #define WPNV_TYPES  ("QfffffBB")     // uint64_t, float, float, float, float, float, uint8_t, uint8_t
@@ -486,6 +486,8 @@ void Mode::navigate_to_waypoint()
             desired_turn_rate_rads = 0.0f;
         }
 
+        // make sure we report the state of the tacking/indirect code in direct mode
+        g2.sailboat.tack_report(desired_heading_cd);
         // call turn rate steering controller
         calc_steering_from_turn_rate(desired_turn_rate_rads);
         AP::logger().Write(

@@ -99,6 +99,19 @@ public:
     // calculate the heading to sail on if we cant go upwind
     float calc_heading(float desired_heading_cd);
 
+    // report out the current tack status
+    void tack_report(float desired_heading_cd);
+    void tack_report(
+        float       desired_heading_cd,
+        int8_t      current_tack,
+        int8_t      new_tack,
+        int8_t      should_tack,
+        float       tack_request_ms,
+        float       crosstrack_error,
+        int8_t      currently_tacking,
+        float       command_heading
+    );
+
     // calculate the compass heading in radians for a given point of sail
     float calc_point_of_sail_heading_rad(float cos_in, float sin_in);
 

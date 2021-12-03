@@ -19,10 +19,12 @@ To Do List
 */
 
 // definitions for TACK dataflash log
-#define TACK_LABELS ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReqMS,XtrackErr,CurrTacking,CmdHeading")
-#define TACK_UNITS ("sh---sm-h") // seconds, deg heading, flag, flag, flag, flag, meters, flag, deg heading
-#define TACK_MULTS ("FB000C00B") // 1e-6, 1e-2, 1, 1, 1, 1e-3, 1, 1, 1e-2
-#define TACK_TYPES ("QfBBBffBf") // uint64_t, float, uint8_t, uint8_t, uint8_t, uint8_t, float, uint8_t, float
+#define TACK_LABELS ("TimeUS,DesHdg,CurTck,NuTck,ShldTck,TckReqMS,XtrkErr,CurrTckng,CmdHdg")
+#define TACK_UNITS ("sh---sm-h")    // seconds, deg heading, flag, flag,
+                                    // flag, flag, meters, flag, deg heading
+#define TACK_MULTS ("FB000C00B")    // 1e-6, 1e-2, 1, 1, 1, 1e-3, 1, 1, 1e-2
+#define TACK_TYPES ("QfBBBffBf")    // uint64_t, float, uint8_t, uint8_t,
+                                    //uint8_t, float, float, uint8_t, float
 
 const AP_Param::GroupInfo Sailboat::var_info[] = {
 
@@ -532,19 +534,48 @@ bool Sailboat::use_indirect_route(float desired_heading_cd) const
     return fabsf(wrap_PI(rover.g2.windvane.get_true_wind_direction_rad() - desired_heading_rad)) <= radians(sail_no_go + SAILBOAT_NOGO_PAD);
 }
 
+// report out the current tack condition
+void Sailboat::tack_report(float desired_heading_cd)
+{
+    tack_report (
+        (double)desired_heading_cd,
+        -1, -1, -1, -1, (double)-1, -1,
+        (double)desired_heading_cd
+    );
+}
+
+void Sailboat::tack_report(
+    float       desired_heading_cd,
+    int8_t      current_tack,
+    int8_t      new_tack,
+    int8_t      should_tack,
+    float       tack_request_ms,
+    float       crosstrack_error,
+    int8_t      currently_tacking,
+    float       command_heading
+)
+{
+    AP::logger().Write(
+        // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,
+        // CurrTacking,CmdHeading")
+        "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
+        AP_HAL::micros64(),
+        (double)desired_heading_cd,
+        current_tack,
+        new_tack,
+        should_tack,
+        (double)tack_request_ms,
+        (double)crosstrack_error,
+        currently_tacking,
+        (double)command_heading
+}
+
 // if we can't sail on the desired heading then we should pick the best heading that we can sail on
 // this function assumes the caller has already checked sailboat_use_indirect_route(desired_heading_cd) returned true
 float Sailboat::calc_heading(float desired_heading_cd)
 {
     if (!tack_enabled()) {
-        AP::logger().Write(
-            // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,CurrTacking,CmdHeading")
-            "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
-            AP_HAL::micros64(),
-            (double)desired_heading_cd,
-            -1, -1, -1, -1, -1, -1,
-            (double)desired_heading_cd
-        );
+        tack_report(desired_heading_cd);
         return desired_heading_cd;
     }
     bool should_tack = false;
@@ -581,16 +612,13 @@ float Sailboat::calc_heading(float desired_heading_cd)
         }
 
         if (!should_tack) {
-            AP::logger().Write(
-                // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,CurrTacking,CmdHeading")
-                "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
-                AP_HAL::micros64(),
+            tack_report (
                 (double)desired_heading_cd,
                 (uint8_t)current_tack,
                 (uint8_t)new_tack,
                 (uint8_t)should_tack,
-                (float)tack_request_ms,
-                (float)rover.g2.wp_nav.crosstrack_error(),
+                (double)tack_request_ms,
+                (double)rover.g2.wp_nav.crosstrack_error(),
                 (uint8_t)currently_tacking,
                 (double)desired_heading_cd
             );
@@ -657,10 +685,7 @@ float Sailboat::calc_heading(float desired_heading_cd)
             }
         }
         // return tack target heading
-        AP::logger().Write(
-            // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,CurrTacking,CmdHeading")
-            "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
-            AP_HAL::micros64(),
+        tack_report (
             (double)desired_heading_cd,
             (uint8_t)current_tack,
             -1,
@@ -675,10 +700,7 @@ float Sailboat::calc_heading(float desired_heading_cd)
 
     // return the correct heading for our current tack
     if (current_tack == AP_WindVane::Sailboat_Tack::TACK_PORT) {
-        AP::logger().Write(
-            // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,CurrTacking,CmdHeading")
-            "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
-            AP_HAL::micros64(),
+        tack_report (
             (double)desired_heading_cd,
             (uint8_t)current_tack,
             -1,
@@ -690,10 +712,7 @@ float Sailboat::calc_heading(float desired_heading_cd)
         );
         return degrees(left_no_go_heading_rad) * 100.0f;
     } else {
-        AP::logger().Write(
-            // ("TimeUS,DesHeading,CurrTack,NewTack,ShouldTack,TackReq,XtrackErr,CurrTacking,CmdHeading")
-            "TACK", TACK_LABELS, TACK_MULTS, TACK_TYPES,
-            AP_HAL::micros64(),
+        tack_report (
             (double)desired_heading_cd,
             (uint8_t)current_tack,
             -1,
