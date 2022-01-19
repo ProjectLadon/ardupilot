@@ -76,6 +76,7 @@ brand_map = {
     'QioTekZealotF427' : ('ZealotF427', 'QioTek'),
     'BeastH7' : ('Beast H7 55A AIO', 'iFlight'),
     'BeastF7' : ('Beast F7 45A AIO', 'iFlight'),
+    'BeastF7v2' : ('Beast F7 v2 55A AIO', 'iFlight'),
     'MambaF405US-I2C' : ('Diatone Mamba Basic F405 MK3/MK3.5', 'Diatone'),
     "FlywooF745" : ('Flywoo Goku GN 745 AIO', 'Flywoo'),
     "FlywooF745Nano" : ('Flywoo Goku Hex F745', 'Flywoo'),
@@ -274,8 +275,9 @@ class ManifestGenerator():
             (brand_name, manufacturer) = brand_map[platform]
             firmware['brand_name'] = brand_name
             firmware['manufacturer'] = manufacturer
+
         # copy over some extra information if available
-        extra_tags = [ 'image_size' ]
+        extra_tags = [ 'image_size', 'brand_name', 'manufacturer' ]
         for tag in extra_tags:
             if tag in apj_json:
                 firmware[tag] = apj_json[tag]

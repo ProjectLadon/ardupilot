@@ -887,7 +887,7 @@ bool AP_Arming::system_checks(bool report)
             return false;
         }
 #endif
-#ifdef ENABLE_SCRIPTING
+#if AP_SCRIPTING_ENABLED
         const AP_Scripting *scripting = AP_Scripting::get_singleton();
         if ((scripting != nullptr) && scripting->enabled() && scripting->init_failed()) {
             check_failed(ARMING_CHECK_SYSTEM, report, "Scripting out of memory");
@@ -1024,9 +1024,9 @@ bool AP_Arming::can_checks(bool report)
                 }
                 case AP_CANManager::Driver_Type_EFI_NWPMU:
                 case AP_CANManager::Driver_Type_USD1:
-                case AP_CANManager::Driver_Type_MPPT_PacketDigital:
                 case AP_CANManager::Driver_Type_None:
                 case AP_CANManager::Driver_Type_Scripting:
+                case AP_CANManager::Driver_Type_Benewake:
                     break;
             }
         }
@@ -1100,13 +1100,13 @@ bool AP_Arming::osd_checks(bool display_failure) const
 
 bool AP_Arming::fettec_checks(bool display_failure) const
 {
-#if HAL_AP_FETTEC_ONEWIRE_ENABLED
+#if AP_FETTEC_ONEWIRE_ENABLED
     const AP_FETtecOneWire *f = AP_FETtecOneWire::get_singleton();
     if (f == nullptr) {
         return true;
     }
 
-    // check camera is ready
+    // check ESCs are ready
     char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
     if (!f->pre_arm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
         check_failed(ARMING_CHECK_ALL, display_failure, "FETtec: %s", fail_msg);
@@ -1362,25 +1362,6 @@ bool AP_Arming::arm(AP_Arming::Method method, const bool do_arming_checks)
         armed = false;
     }
 
-#if HAL_LOGGER_FILE_CONTENTS_ENABLED
-    /*
-      log files useful for diagnostics on arming. We log on arming as
-      with LOG_DISARMED we don't want to log the statistics at boot or
-      we wouldn't get a realistic idea of key system values
-      Note that some of these files may not exist, in that case they
-      are ignored
-     */
-    static const char *log_content_filenames[] = {
-        "@SYS/uarts.txt",
-        "@SYS/dma.txt",
-        "@SYS/memory.txt",
-        "@SYS/threads.txt",
-        "@ROMFS/hwdef.dat",
-    };
-    for (const auto *name : log_content_filenames) {
-        AP::logger().log_file_content(name);
-    }
-#endif
     return armed;
 }
 

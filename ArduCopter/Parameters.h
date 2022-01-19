@@ -574,7 +574,7 @@ public:
     ToyMode toy_mode;
 #endif
 
-#if OPTFLOW == ENABLED
+#if AP_OPTICALFLOW_ENABLED
     // we need a pointer to the mode for the G2 table
     void *mode_flowhold_ptr;
 #endif
@@ -594,9 +594,9 @@ public:
     void *autotune_ptr;
 #endif
 
-#ifdef ENABLE_SCRIPTING
+#if AP_SCRIPTING_ENABLED
     AP_Scripting scripting;
-#endif // ENABLE_SCRIPTING
+#endif // AP_SCRIPTING_ENABLED
 
     AP_Float tuning_min;
     AP_Float tuning_max;

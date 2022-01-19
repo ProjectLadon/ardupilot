@@ -25,8 +25,8 @@
 #define RX_BOUNCE_BUFSIZE 64U
 #define TX_BOUNCE_BUFSIZE 64U
 
-// enough for uartA to uartI, plus IOMCU
-#define UART_MAX_DRIVERS 10
+// enough for uartA to uartJ, plus IOMCU
+#define UART_MAX_DRIVERS 11
 
 class ChibiOS::UARTDriver : public AP_HAL::UARTDriver {
 public:
@@ -69,7 +69,7 @@ public:
 
     // control optional features
     bool set_options(uint16_t options) override;
-    uint8_t get_options(void) const override;
+    uint16_t get_options(void) const override;
 
     // write to a locked port. If port is locked and key is not correct then 0 is returned
     // and write is discarded
@@ -141,8 +141,10 @@ public:
         return _baudrate/(9*1024);
     }
 
+#if HAL_UART_STATS_ENABLED
     // request information on uart I/O for one uart
     void uart_info(ExpandingString &str) override;
+#endif
 
     /*
       return true if this UART has DMA enabled on both RX and TX

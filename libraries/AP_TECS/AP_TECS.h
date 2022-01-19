@@ -88,7 +88,12 @@ public:
     void reset_pitch_I(void) {
         _integSEB_state = 0.0f;
     }
-    
+
+    // reset throttle integrator
+    void reset_throttle_I(void) {
+        _integTHR_state = 0.0;
+    }
+
     // return landing sink rate
     float get_land_sinkrate(void) const {
         return _land_sink;
@@ -323,6 +328,14 @@ private:
     // Maximum and minimum floating point pitch limits
     float _PITCHmaxf;
     float _PITCHminf;
+
+    // 1 if throttle is clipping at max value, -1 if clipping at min value, 0 otherwise
+    enum class ThrClipStatus  : int8_t {
+        MIN  = -1,
+        NONE =  0,
+        MAX  =  1,
+    };
+    ThrClipStatus _thr_clip_status;
 
     // Specific energy quantities
     float _SPE_dem;

@@ -182,6 +182,14 @@ public:
         k_nr_aux_servo_functions         ///< This must be the last enum value (only add new values _before_ this one)
     } Aux_servo_function_t;
 
+    // check if a function is valid for indexing into functions
+    static bool valid_function(Aux_servo_function_t fn) {
+        return fn >= 0 && fn < k_nr_aux_servo_functions;
+    }
+    bool valid_function(void) const {
+        return valid_function(function);
+    }
+    
     // used to get min/max/trim limit value based on reverse
     enum class Limit {
         TRIM,
@@ -243,6 +251,9 @@ public:
         return (SRV_Channel::Aux_servo_function_t)function.get();
     }
 
+    // return the motor number of a channel, or -1 if not a motor
+    int8_t get_motor_num(void) const;
+
     // set and save function for channel. Used in upgrade of parameters in plane
     void function_set_and_save(SRV_Channel::Aux_servo_function_t f) {
         function.set_and_save(int8_t(f));
@@ -270,7 +281,7 @@ private:
     AP_Int16 servo_trim;
     // reversal, following convention that 1 means reversed, 0 means normal
     AP_Int8 reversed;
-    AP_Int16 function;
+    AP_Enum16<Aux_servo_function_t> function;
 
     // a pending output value as PWM
     uint16_t output_pwm;
@@ -564,6 +575,7 @@ private:
     // support for Robotis servo protocol
     AP_RobotisServo robotis;
     static AP_RobotisServo *robotis_ptr;
+#endif // HAL_BUILD_AP_PERIPH
 
 #if HAL_SUPPORT_RCOUT_SERIAL
     // support for BLHeli protocol
@@ -571,11 +583,10 @@ private:
     static AP_BLHeli *blheli_ptr;
 #endif
 
-#if HAL_AP_FETTEC_ONEWIRE_ENABLED
+#if AP_FETTEC_ONEWIRE_ENABLED
     AP_FETtecOneWire fetteconwire;
     static AP_FETtecOneWire *fetteconwire_ptr;
-#endif  // HAL_AP_FETTEC_ONEWIRE_ENABLED
-#endif // HAL_BUILD_AP_PERIPH
+#endif  // AP_FETTEC_ONEWIRE_ENABLED
 
     static uint16_t disabled_mask;
 

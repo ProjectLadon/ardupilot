@@ -319,7 +319,7 @@ float Frame::get_air_density(float alt_amsl) const
     AP_Baro::SimpleAtmosphere(alt_amsl * 0.001f, sigma, delta, theta);
 
     const float air_pressure = SSL_AIR_PRESSURE * delta;
-    return air_pressure / (ISA_GAS_CONSTANT * (C_TO_KELVIN + model.refTempC));
+    return air_pressure / (ISA_GAS_CONSTANT * (C_TO_KELVIN(model.refTempC)));
 }
 
 /*
@@ -495,7 +495,9 @@ void Frame::init(const char *frame_str, Battery *_battery)
     // setup reasonable defaults for battery
     AP_Param::set_default_by_name("SIM_BATT_VOLTAGE", model.maxVoltage);
     AP_Param::set_default_by_name("SIM_BATT_CAP_AH", model.battCapacityAh);
-    AP_Param::set_default_by_name("BATT_CAPACITY", model.battCapacityAh*1000);
+    if (model.battCapacityAh > 0) {
+        AP_Param::set_default_by_name("BATT_CAPACITY", model.battCapacityAh*1000);
+    }
 }
 
 /*

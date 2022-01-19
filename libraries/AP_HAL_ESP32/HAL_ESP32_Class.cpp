@@ -20,16 +20,12 @@
 #include "Scheduler.h"
 #include "I2CDevice.h"
 #include "SPIDevice.h"
-#include "I2CDevice.h"
 #include "UARTDriver.h"
 #include "WiFiDriver.h"
 #include "WiFiUdpDriver.h"
 #include "RCInput.h"
 #include "RCOutput.h"
 #include "Storage.h"
-#include "RCOutput.h"
-#include "Storage.h"
-#include "RCOutput.h"
 #include "AnalogIn.h"
 #include "Util.h"
 
@@ -52,6 +48,7 @@ static Empty::UARTDriver uartFDriver;
 static Empty::UARTDriver uartGDriver;
 static Empty::UARTDriver uartHDriver;
 static Empty::UARTDriver uartIDriver;
+static Empty::UARTDriver uartJDriver;
 
 static Empty::DSP dspDriver;
 
@@ -84,6 +81,7 @@ HAL_ESP32::HAL_ESP32() :
         &uartGDriver, //Extra 2
         &uartHDriver, //Extra 3
         &uartIDriver, //Extra 4
+        &uartJDriver, //Extra 5
         &i2cDeviceManager,
         &spiDeviceManager,
         nullptr,

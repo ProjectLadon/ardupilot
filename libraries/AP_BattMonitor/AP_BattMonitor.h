@@ -45,7 +45,6 @@ class AP_BattMonitor_SMBus_Maxell;
 class AP_BattMonitor_SMBus_Rotoye;
 class AP_BattMonitor_UAVCAN;
 class AP_BattMonitor_Generator;
-class AP_BattMonitor_MPPT_PacketDigital;
 class AP_BattMonitor_INA2XX;
 class AP_BattMonitor_LTC2946;
 class AP_BattMonitor_Torqeedo;
@@ -64,7 +63,6 @@ class AP_BattMonitor
     friend class AP_BattMonitor_FuelFlow;
     friend class AP_BattMonitor_FuelLevel_PWM;
     friend class AP_BattMonitor_Generator;
-    friend class AP_BattMonitor_MPPT_PacketDigital;
     friend class AP_BattMonitor_INA2XX;
     friend class AP_BattMonitor_LTC2946;
 
@@ -99,7 +97,7 @@ public:
         GENERATOR_ELEC             = 17,
         GENERATOR_FUEL             = 18,
         Rotoye                     = 19,
-        MPPT_PacketDigital         = 20,
+        // 20 was MPPT_PacketDigital
         INA2XX                     = 21,
         LTC2946                    = 22,
         Torqeedo                   = 23,
@@ -241,6 +239,9 @@ public:
     // Returns mavlink charge state
     MAV_BATTERY_CHARGE_STATE get_mavlink_charge_state(const uint8_t instance) const;
 
+    // Returns mavlink fault state
+    uint32_t get_mavlink_fault_bitmask(const uint8_t instance) const;
+
     static const struct AP_Param::GroupInfo var_info[];
 
 protected:
@@ -256,7 +257,6 @@ private:
     uint32_t    _log_battery_bit;
     uint8_t     _num_instances;                                     /// number of monitors
 
-    void convert_params(void);
     void convert_dynamic_param_groups(uint8_t instance);
 
     /// returns the failsafe state of the battery

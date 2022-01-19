@@ -19,6 +19,9 @@
 
 #include "AP_ADSB_uAvionix_UCP.h"
 
+// This driver implements the UCP protocol from uAvionix which is a variant of the GDL90 protocol by Garmin
+// https://uavionix.com/downloads/ping200X/uAvionix-UCP-Transponder-ICD-Rev-Q.pdf
+
 #if HAL_ADSB_UCP_ENABLED
 
 #include <AP_SerialManager/AP_SerialManager.h>
@@ -42,7 +45,7 @@ extern const AP_HAL::HAL &hal;
 // detect if any port is configured as uAvionix_UCP
 bool AP_ADSB_uAvionix_UCP::detect()
 {
-    return (AP::serialmanager().find_serial(AP_SerialManager::SerialProtocol_ADSB, 0) != nullptr);
+    return AP::serialmanager().have_serial(AP_SerialManager::SerialProtocol_ADSB, 0);
 }
 
 

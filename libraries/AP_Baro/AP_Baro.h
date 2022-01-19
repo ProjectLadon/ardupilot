@@ -7,6 +7,10 @@
 #include <AP_MSP/msp.h>
 #include <AP_ExternalAHRS/AP_ExternalAHRS.h>
 
+#ifndef AP_SIM_BARO_ENABLED
+#define AP_SIM_BARO_ENABLED (CONFIG_HAL_BOARD == HAL_BOARD_SITL)
+#endif
+
 #ifndef HAL_MSP_BARO_ENABLED
 #define HAL_MSP_BARO_ENABLED HAL_MSP_SENSORS_ENABLED
 #endif
@@ -25,7 +29,7 @@
 #define BARO_DATA_CHANGE_TIMEOUT_MS     2000    // timeout in ms since last successful read that involved temperature of pressure changing
 
 #ifndef HAL_BARO_WIND_COMP_ENABLED
-#define HAL_BARO_WIND_COMP_ENABLED !HAL_MINIMIZE_FEATURES && !defined(HAL_BUILD_AP_PERIPH)
+#define HAL_BARO_WIND_COMP_ENABLED !HAL_MINIMIZE_FEATURES
 #endif
 
 class AP_Baro_Backend;

@@ -32,9 +32,13 @@
 #define HAL_NAVEKF3_AVAILABLE 1
 #endif
 
+#ifndef AP_AHRS_SIM_ENABLED
+#define AP_AHRS_SIM_ENABLED (CONFIG_HAL_BOARD == HAL_BOARD_SITL)
+#endif
+
 #include "AP_AHRS.h"
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+#if AP_AHRS_SIM_ENABLED
 #include <SITL/SITL.h>
 #endif
 
@@ -425,8 +429,14 @@ public:
     void Log_Write_Home_And_Origin();
     void Write_AHRS2(void) const;
     void Write_Attitude(const Vector3f &targets) const;
-    void Write_Origin(uint8_t origin_type, const Location &loc) const; 
+
+    enum class LogOriginType {
+        ekf_origin = 0,
+        ahrs_home = 1
+    };
+    void Write_Origin(LogOriginType origin_type, const Location &loc) const; 
     void Write_POS(void) const;
+    void write_video_stabilisation() const;
 
     // return a smoothed and corrected gyro vector in radians/second
     // using the latest ins data (which may not have been consumed by
@@ -547,6 +557,13 @@ public:
         return AP::ins().get_accel();
     }
 
+    // return primary accel bias. This should be subtracted from
+    // get_accel() vector to get best current body frame accel
+    // estimate
+    const Vector3f &get_accel_bias(void) const {
+        return _accel_bias;
+    }
+    
     /*
      * AHRS is used as a transport for vehicle-takeoff-expected and
      * vehicle-landing-expected:
@@ -652,7 +669,7 @@ private:
 #if HAL_NAVEKF2_AVAILABLE
         ,TWO = 2
 #endif
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+#if AP_AHRS_SIM_ENABLED
         ,SIM = 10
 #endif
 #if HAL_EXTERNAL_AHRS_ENABLED
@@ -708,6 +725,8 @@ private:
     Vector3f _gyro_estimate;
     Vector3f _accel_ef_ekf[INS_MAX_INSTANCES];
     Vector3f _accel_ef_ekf_blended;
+    Vector3f _accel_bias;
+
     const uint16_t startup_delay_ms = 1000;
     uint32_t start_time_ms;
     uint8_t _ekf_flags; // bitmask from Flags enumeration
@@ -745,7 +764,7 @@ private:
 
     EKFType last_active_ekf_type;
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+#if AP_AHRS_SIM_ENABLED
     SITL::SIM *_sitl;
     uint32_t _last_body_odm_update_ms;
     void update_SITL(void);

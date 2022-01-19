@@ -32,14 +32,14 @@ public:
     // init
     virtual void        init(motor_frame_class frame_class, motor_frame_type frame_type) override;
 
-#ifdef ENABLE_SCRIPTING
+#if AP_SCRIPTING_ENABLED
     // Init to be called from scripting
     virtual bool        init(uint8_t expected_num_motors);
 
     // Set throttle factor from scripting
     bool                set_throttle_factor(int8_t motor_num, float throttle_factor);
 
-#endif // ENABLE_SCRIPTING
+#endif // AP_SCRIPTING_ENABLED
 
     // set frame class (i.e. quad, hexa, heli) and type (i.e. x, plus)
     void                set_frame_class_and_type(motor_frame_class frame_class, motor_frame_type frame_type) override;
@@ -75,9 +75,6 @@ public:
     float               get_roll_factor(uint8_t i) override { return _roll_factor[i]; }
     // return the pitch factor of any motor
     float               get_pitch_factor(uint8_t i) override { return _pitch_factor[i]; }
-
-    const char*         get_frame_string() const override { return _frame_class_string; }
-    const char*         get_type_string() const override { return _frame_type_string; }
 
     // disable the use of motor torque to control yaw. Used when an external mechanism such
     // as vectoring is used for yaw control
@@ -133,6 +130,9 @@ protected:
 
     // call vehicle supplied thrust compensation if set
     void                thrust_compensation(void) override;
+
+    const char*         _get_frame_string() const override { return _frame_class_string; }
+    const char*         get_type_string() const override { return _frame_type_string; }
 
     float               _roll_factor[AP_MOTORS_MAX_NUM_MOTORS]; // each motors contribution to roll
     float               _pitch_factor[AP_MOTORS_MAX_NUM_MOTORS]; // each motors contribution to pitch

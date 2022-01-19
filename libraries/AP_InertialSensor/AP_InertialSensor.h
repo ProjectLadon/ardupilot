@@ -17,7 +17,7 @@
 #define INS_MAX_INSTANCES 3
 #endif
 #define INS_MAX_BACKENDS  2*INS_MAX_INSTANCES
-#define INS_MAX_NOTCHES 4
+#define INS_MAX_NOTCHES 12
 #ifndef INS_VIBRATION_CHECK_INSTANCES
   #if HAL_MEM_CLASS >= HAL_MEM_CLASS_300
     #define INS_VIBRATION_CHECK_INSTANCES INS_MAX_INSTANCES
@@ -39,15 +39,17 @@
 #include <stdint.h>
 
 #include <AP_AccelCal/AP_AccelCal.h>
-#include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/utility/RingBuffer.h>
 #include <AP_Math/AP_Math.h>
 #include <AP_ExternalAHRS/AP_ExternalAHRS.h>
 #include <Filter/LowPassFilter2p.h>
 #include <Filter/LowPassFilter.h>
-#include <Filter/NotchFilter.h>
 #include <Filter/HarmonicNotchFilter.h>
 #include <AP_Math/polyfit.h>
+
+#ifndef AP_SIM_INS_ENABLED
+#define AP_SIM_INS_ENABLED (CONFIG_HAL_BOARD == HAL_BOARD_SITL)
+#endif
 
 class AP_InertialSensor_Backend;
 class AuxiliaryBus;
@@ -157,7 +159,7 @@ public:
     bool get_gyro_health(uint8_t instance) const { return (instance<_gyro_count) ? _gyro_healthy[instance] : false; }
     bool get_gyro_health(void) const { return get_gyro_health(_primary_gyro); }
     bool get_gyro_health_all(void) const;
-    uint8_t get_gyro_count(void) const { return _gyro_count; }
+    uint8_t get_gyro_count(void) const { return MIN(INS_MAX_INSTANCES, _accel_count); }
     bool gyro_calibrated_ok(uint8_t instance) const { return _gyro_cal_ok[instance]; }
     bool gyro_calibrated_ok_all() const;
     bool use_gyro(uint8_t instance) const;
@@ -166,7 +168,7 @@ public:
     bool get_accel_health(uint8_t instance) const { return (instance<_accel_count) ? _accel_healthy[instance] : false; }
     bool get_accel_health(void) const { return get_accel_health(_primary_accel); }
     bool get_accel_health_all(void) const;
-    uint8_t get_accel_count(void) const { return _accel_count; }
+    uint8_t get_accel_count(void) const { return MIN(INS_MAX_INSTANCES, _accel_count); }
     bool accel_calibrated_ok_all() const;
     bool use_accel(uint8_t instance) const;
 
@@ -252,6 +254,9 @@ public:
     // harmonic notch current center frequency
     float get_gyro_dynamic_notch_center_freq_hz(void) const { return _calculated_harmonic_notch_freq_hz[0]; }
 
+    // number of dynamic harmonic notches
+    uint8_t get_num_gyro_dynamic_notches(void) const { return _num_dynamic_harmonic_notches; }
+
     // set of harmonic notch current center frequencies
     const float* get_gyro_dynamic_notch_center_frequencies_hz(void) const { return _calculated_harmonic_notch_freq_hz; }
 
@@ -274,6 +279,9 @@ public:
     bool has_harmonic_option(HarmonicNotchFilterParams::Options option) {
         return _harmonic_notch_filter.hasOption(option);
     }
+
+    // write out harmonic notch log messages
+    void write_notch_log_messages() const;
 
     // indicate which bit in LOG_BITMASK indicates raw logging enabled
     void set_log_raw_bit(uint32_t log_raw_bit) { _log_raw_bit = log_raw_bit; }
@@ -499,12 +507,14 @@ private:
     bool _new_gyro_data[INS_MAX_INSTANCES];
 
     // optional notch filter on gyro
-    NotchFilterParams _notch_filter;
-    NotchFilterVector3f _gyro_notch_filter[INS_MAX_INSTANCES];
+    HarmonicNotchFilterParams _notch_filter;
+    HarmonicNotchFilterVector3f _gyro_notch_filter[INS_MAX_INSTANCES];
 
     // optional harmonic notch filter on gyro
     HarmonicNotchFilterParams _harmonic_notch_filter;
     HarmonicNotchFilterVector3f _gyro_harmonic_notch_filter[INS_MAX_INSTANCES];
+    // number of independent notches in the filter
+    uint8_t _num_dynamic_harmonic_notches;
     // the current center frequency for the notch
     float _calculated_harmonic_notch_freq_hz[INS_MAX_NOTCHES];
     uint8_t _num_calculated_harmonic_notch_frequencies;

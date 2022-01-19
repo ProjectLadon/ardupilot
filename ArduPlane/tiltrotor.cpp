@@ -107,6 +107,22 @@ void Tiltrotor::setup()
 
     _is_vectored = tilt_mask != 0 && type == TILT_TYPE_VECTORED_YAW;
 
+    // true if a fixed forward motor is configured, either throttle, throttle left  or throttle right.
+    // bicopter tiltrotors use throttle left and right as tilting motors, so they don't count in that case.
+    _have_fw_motor = SRV_Channels::function_assigned(SRV_Channel::k_throttle) ||
+                    ((SRV_Channels::function_assigned(SRV_Channel::k_throttleLeft) || SRV_Channels::function_assigned(SRV_Channel::k_throttleRight))
+                        && (type != TILT_TYPE_BICOPTER));
+
+
+    // check if there are any perminant VTOL motors
+    for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; ++i) {
+        if (motors->is_motor_enabled(i) && ((tilt_mask & (1U<<1)) == 0)) {
+            // enabled motor not set in tilt mask
+            _have_vtol_motor = true;
+            break;
+        }
+    }
+
     if (quadplane.motors_var_info == AP_MotorsMatrix::var_info && _is_vectored) {
         // we will be using vectoring for yaw
         motors->disable_yaw_torque();
@@ -169,6 +185,8 @@ void Tiltrotor::slew(float newtilt)
 {
     float max_change = tilt_max_change(newtilt<current_tilt, newtilt > get_fully_forward_tilt());
     current_tilt = constrain_float(newtilt, current_tilt-max_change, current_tilt+max_change);
+
+    angle_achieved = is_equal(newtilt, current_tilt);
 
     // translate to 0..1000 range and output
     SRV_Channels::set_output_scaled(SRV_Channel::k_motor_tilt, 1000 * current_tilt);
@@ -407,7 +425,7 @@ void Tiltrotor::tilt_compensate_angle(float *thrust, uint8_t num_motors, float n
             // but moves us to no roll control as the angle increases
             thrust[i] = current_tilt * avg_tilt_thrust + thrust[i] * (1-current_tilt);
             // add in differential thrust for yaw control, scaled by tilt angle
-            const float diff_thrust = motors->get_roll_factor(i) * motors->get_yaw() * sin_tilt * yaw_gain;
+            const float diff_thrust = motors->get_roll_factor(i) * (motors->get_yaw()+motors->get_yaw_ff()) * sin_tilt * yaw_gain;
             thrust[i] += diff_thrust;
             largest_tilted = MAX(largest_tilted, thrust[i]);
         }
@@ -528,8 +546,8 @@ void Tiltrotor::vectoring(void)
         SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRearRight,1000 * constrain_float(base_output + right,0,1));
         SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRear,  1000 * constrain_float(base_output + mid,0,1));
     } else {
-        const float yaw_out = motors->get_yaw();
-        const float roll_out = motors->get_roll();
+        const float yaw_out = motors->get_yaw()+motors->get_yaw_ff();
+        const float roll_out = motors->get_roll()+motors->get_roll_ff();
         float yaw_range = zero_out;
 
         // now apply vectored thrust for yaw and roll.

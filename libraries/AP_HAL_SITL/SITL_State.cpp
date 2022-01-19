@@ -59,10 +59,8 @@ void SITL_State::_set_param_default(const char *parm)
 /*
   setup for SITL handling
  */
-void SITL_State::_sitl_setup(const char *home_str)
+void SITL_State::_sitl_setup()
 {
-    _home_str = home_str;
-
 #if !defined(__CYGWIN__) && !defined(__CYGWIN64__)
     _parent_pid = getppid();
 #endif
@@ -76,7 +74,6 @@ void SITL_State::_sitl_setup(const char *home_str)
     if (_sitl != nullptr) {
         // setup some initial values
         _update_airspeed(0);
-        _update_rangefinder(0);
         if (enable_gimbal) {
             gimbal = new SITL::Gimbal(_sitl->state);
         }
@@ -167,16 +164,7 @@ void SITL_State::_fdm_input_step(void)
 
     if (_sitl != nullptr) {
         _update_airspeed(_sitl->state.airspeed);
-        _update_rangefinder(_sitl->state.range);
-
-        if (_sitl->adsb_plane_count >= 0 &&
-            adsb == nullptr) {
-            adsb = new SITL::ADSB(_sitl->state, sitl_model->get_home(), get_instance());
-        } else if (_sitl->adsb_plane_count == -1 &&
-                   adsb != nullptr) {
-            delete adsb;
-            adsb = nullptr;
-        }
+        _update_rangefinder();
     }
 
     // trigger all APM timers.
@@ -220,6 +208,16 @@ SITL::SerialDevice *SITL_State::create_serial_sim(const char *name, const char *
         }
         vicon = new SITL::Vicon();
         return vicon;
+#if HAL_SIM_ADSB_ENABLED
+    } else if (streq(name, "adsb")) {
+        // ADSB is a stand-out as it is the only serial device which
+        // will cope with begin() being called multiple times on a
+        // serial port
+        if (adsb == nullptr) {
+            adsb = new SITL::ADSB();
+        }
+        return adsb;
+#endif
     } else if (streq(name, "benewake_tf02")) {
         if (benewake_tf02 != nullptr) {
             AP_HAL::panic("Only one benewake_tf02 at a time");
@@ -325,30 +323,38 @@ SITL::SerialDevice *SITL_State::create_serial_sim(const char *name, const char *
     //     }
     //     frsky_sport = new SITL::Frsky_SPortPassthrough();
     //     return frsky_sportpassthrough;
+#if AP_SIM_CRSF_ENABLED
     } else if (streq(name, "crsf")) {
         if (crsf != nullptr) {
             AP_HAL::panic("Only one crsf at a time");
         }
         crsf = new SITL::CRSF();
         return crsf;
+#endif
+#if HAL_SIM_PS_RPLIDARA2_ENABLED
     } else if (streq(name, "rplidara2")) {
         if (rplidara2 != nullptr) {
             AP_HAL::panic("Only one rplidara2 at a time");
         }
         rplidara2 = new SITL::PS_RPLidarA2();
         return rplidara2;
+#endif
+#if HAL_SIM_PS_TERARANGERTOWER_ENABLED
     } else if (streq(name, "terarangertower")) {
         if (terarangertower != nullptr) {
             AP_HAL::panic("Only one terarangertower at a time");
         }
         terarangertower = new SITL::PS_TeraRangerTower();
         return terarangertower;
+#endif
+#if HAL_SIM_PS_LIGHTWARE_SF45B_ENABLED
     } else if (streq(name, "sf45b")) {
         if (sf45b != nullptr) {
             AP_HAL::panic("Only one sf45b at a time");
         }
         sf45b = new SITL::PS_LightWare_SF45B();
         return sf45b;
+#endif
     } else if (streq(name, "richenpower")) {
         sitl_model->set_richenpower(&_sitl->richenpower_sim);
         return &_sitl->richenpower_sim;
@@ -382,12 +388,14 @@ SITL::SerialDevice *SITL_State::create_serial_sim(const char *name, const char *
         }
         lord = new SITL::LORD();
         return lord;
+#if HAL_SIM_AIS_ENABLED
     } else if (streq(name, "AIS")) {
         if (ais != nullptr) {
             AP_HAL::panic("Only one AIS at a time");
         }
         ais = new SITL::AIS();
         return ais;
+#endif
     } else if (strncmp(name, "gps", 3) == 0) {
         const char *p = strchr(name, ':');
         if (p == nullptr) {
@@ -510,8 +518,10 @@ void SITL_State::_fdm_input_local(void)
     // construct servos structure for FDM
     _simulator_servos(input);
 
+#if HAL_SIM_JSON_MASTER_ENABLED
     // read servo inputs from ride along flight controllers
     ride_along.receive(input);
+#endif
 
     // update the model
     sitl_model->update_model(input);
@@ -527,15 +537,19 @@ void SITL_State::_fdm_input_local(void)
         }
     }
 
+#if HAL_SIM_JSON_MASTER_ENABLED
     // output JSON state to ride along flight controllers
     ride_along.send(_sitl->state,sitl_model->get_position_relhome());
+#endif
 
     if (gimbal != nullptr) {
         gimbal->update();
     }
+#if HAL_SIM_ADSB_ENABLED
     if (adsb != nullptr) {
-        adsb->update();
+        adsb->update(*sitl_model);
     }
+#endif
     if (vicon != nullptr) {
         Quaternion attitude;
         sitl_model->get_attitude(attitude);
@@ -603,21 +617,30 @@ void SITL_State::_fdm_input_local(void)
     //     frsky_sportpassthrough->update();
     // }
 
+#if AP_SIM_CRSF_ENABLED
     if (crsf != nullptr) {
         crsf->update();
     }
+#endif
 
+#if HAL_SIM_PS_RPLIDARA2_ENABLED
     if (rplidara2 != nullptr) {
         rplidara2->update(sitl_model->get_location());
     }
+#endif
 
+#if HAL_SIM_PS_TERARANGERTOWER_ENABLED
     if (terarangertower != nullptr) {
         terarangertower->update(sitl_model->get_location());
     }
+#endif
 
+#if HAL_SIM_PS_LIGHTWARE_SF45B_ENABLED
     if (sf45b != nullptr) {
         sf45b->update(sitl_model->get_location());
     }
+#endif
+
     if (vectornav != nullptr) {
         vectornav->update();
     }
@@ -626,9 +649,11 @@ void SITL_State::_fdm_input_local(void)
         lord->update();
     }
 
+#if HAL_SIM_AIS_ENABLED
     if (ais != nullptr) {
         ais->update();
     }
+#endif
     for (uint8_t i=0; i<ARRAY_SIZE(gps); i++) {
         if (gps[i] != nullptr) {
             gps[i]->update();

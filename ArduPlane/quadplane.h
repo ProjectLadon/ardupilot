@@ -273,12 +273,22 @@ private:
     float transition_threshold(void);
 
     AP_Int16 transition_time_ms;
+    AP_Int16 back_trans_pitch_limit_ms;
 
     // transition deceleration, m/s/s
     AP_Float transition_decel;
 
-    // transition failure milliseconds
-    AP_Int16 transition_failure;
+    // transition failure handling
+    struct TRANS_FAIL {
+        enum ACTION {
+            QLAND,
+            QRTL
+        };
+        AP_Int16 timeout;
+        AP_Enum<ACTION> action;
+        bool warned;
+    } transition_failure;
+
 
     // Quadplane trim, degrees
     AP_Float ahrs_trim_pitch;
@@ -373,9 +383,6 @@ private:
 
     Location last_auto_target;
 
-    // pitch when we enter loiter mode
-    int32_t loiter_initial_pitch_cd;
-
     // when did we last run the attitude controller?
     uint32_t last_att_control_ms;
 
@@ -435,6 +442,7 @@ private:
         uint32_t last_log_ms;
         bool reached_wp_speed;
         uint32_t last_run_ms;
+        float pos1_start_speed;
     private:
         uint32_t last_state_change_ms;
         enum position_control_state state;
@@ -503,6 +511,7 @@ private:
         OPTION_DISABLE_APPROACH=(1<<16),
         OPTION_REPOSITION_LANDING=(1<<17),
         OPTION_ONLY_ARM_IN_QMODE_OR_AUTO=(1<<18),
+        OPTION_TRANS_FAIL_TO_FW=(1<<19),
     };
 
     AP_Float takeoff_failure_scalar;

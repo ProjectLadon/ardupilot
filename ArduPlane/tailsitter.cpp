@@ -141,6 +141,30 @@ const AP_Param::GroupInfo Tailsitter::var_info[] = {
     // @Range: -1 100
     AP_GROUPINFO("THR_VT", 18, Tailsitter, transition_throttle_vtol, -1),
 
+    // @Param: VT_R_P
+    // @DisplayName: Tailsitter VTOL control surface roll gain
+    // @Description: Scale from PID output to control surface, for use where a single axis is actuated by both motors and Tilt/control surface on a copter style tailsitter, increase to favor control surfaces and reduce motor output by reducing gains
+    // @Range: 0 2
+    AP_GROUPINFO("VT_R_P", 19, Tailsitter, VTOL_roll_scale, 1),
+
+    // @Param: VT_P_P
+    // @DisplayName: Tailsitter VTOL control surface pitch gain
+    // @Description: Scale from PID output to control surface, for use where a single axis is actuated by both motors and Tilt/control surface on a copter style tailsitter, increase to favor control surfaces and reduce motor output by reducing gains
+    // @Range: 0 2
+    AP_GROUPINFO("VT_P_P", 20, Tailsitter, VTOL_pitch_scale, 1),
+
+    // @Param: VT_Y_P
+    // @DisplayName: Tailsitter VTOL control surface yaw gain
+    // @Description: Scale from PID output to control surface, for use where a single axis is actuated by both motors and Tilt/control surface on a copter style tailsitter, increase to favor control surfaces and reduce motor output by reducing gains
+    // @Range: 0 2
+    AP_GROUPINFO("VT_Y_P", 21, Tailsitter, VTOL_yaw_scale, 1),
+
+    // @Param: MIN_VO
+    // @DisplayName: Tailsitter Disk loading minimum outflow speed
+    // @Description: Use in conjunction with disk therory gain scaling and Q_TAILSIT_DSKLD to specify minumum airspeed over control surfaces, this will be used to boost throttle, when decending for example, 0 disables
+    // @Range: 0 15
+    AP_GROUPINFO("MIN_VO", 22, Tailsitter, disk_loading_min_outflow, 0),
+
     AP_GROUPEND
 };
 
@@ -195,6 +219,10 @@ void Tailsitter::setup()
                    (!is_zero(vectored_hover_gain) &&
                     (SRV_Channels::function_assigned(SRV_Channel::k_tiltMotorLeft) ||
                      SRV_Channels::function_assigned(SRV_Channel::k_tiltMotorRight)));
+
+    _have_elevator = SRV_Channels::function_assigned(SRV_Channel::k_elevator);
+    _have_aileron = SRV_Channels::function_assigned(SRV_Channel::k_aileron);
+    _have_rudder = SRV_Channels::function_assigned(SRV_Channel::k_rudder);
 
     // set defaults for dual/single motor tailsitter
     if (quadplane.frame_class == AP_Motors::MOTOR_FRAME_TAILSITTER) {
@@ -363,13 +391,15 @@ void Tailsitter::output(void)
     plane.yawController.reset_I();
 
     // pull in copter control outputs
-    SRV_Channels::set_output_scaled(SRV_Channel::k_aileron, (motors->get_yaw()+motors->get_yaw_ff())*-SERVO_MAX);
-    SRV_Channels::set_output_scaled(SRV_Channel::k_elevator, (motors->get_pitch()+motors->get_pitch_ff())*SERVO_MAX);
-    SRV_Channels::set_output_scaled(SRV_Channel::k_rudder, (motors->get_roll()+motors->get_roll_ff())*SERVO_MAX);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_aileron, (motors->get_yaw()+motors->get_yaw_ff())*-SERVO_MAX*VTOL_yaw_scale);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_elevator, (motors->get_pitch()+motors->get_pitch_ff())*SERVO_MAX*VTOL_pitch_scale);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_rudder, (motors->get_roll()+motors->get_roll_ff())*SERVO_MAX*VTOL_roll_scale);
 
     if (hal.util->get_soft_armed()) {
         // scale surfaces for throttle
         speed_scaling();
+    } else if (tailsitter_motors != nullptr) {
+        tailsitter_motors->set_min_throttle(0.0);
     }
 
     tilt_left = 0.0f;
@@ -399,9 +429,36 @@ void Tailsitter::output(void)
 
     // Check for saturated limits
     bool tilt_lim = _is_vectored && ((fabsf(SRV_Channels::get_output_scaled(SRV_Channel::Aux_servo_function_t::k_tiltMotorLeft)) >= SERVO_MAX) || (fabsf(SRV_Channels::get_output_scaled(SRV_Channel::Aux_servo_function_t::k_tiltMotorRight)) >= SERVO_MAX));
-    bool roll_lim = fabsf(SRV_Channels::get_output_scaled(SRV_Channel::Aux_servo_function_t::k_rudder)) >= SERVO_MAX;
-    bool pitch_lim = fabsf(SRV_Channels::get_output_scaled(SRV_Channel::Aux_servo_function_t::k_elevator)) >= SERVO_MAX;
-    bool yaw_lim = fabsf(SRV_Channels::get_output_scaled(SRV_Channel::Aux_servo_function_t::k_aileron)) >= SERVO_MAX;
+    bool roll_lim = _have_rudder && (fabsf(SRV_Channels::get_output_scaled(SRV_Channel::Aux_servo_function_t::k_rudder)) >= SERVO_MAX);
+    bool pitch_lim = _have_elevator && (fabsf(SRV_Channels::get_output_scaled(SRV_Channel::Aux_servo_function_t::k_elevator)) >= SERVO_MAX);
+    bool yaw_lim = _have_aileron && (fabsf(SRV_Channels::get_output_scaled(SRV_Channel::Aux_servo_function_t::k_aileron)) >= SERVO_MAX);
+
+    // Mix elevons and V-tail, always giving full priority to pitch
+    float elevator_mix = SRV_Channels::get_output_scaled(SRV_Channel::k_elevator) * (100.0 - plane.g.mixing_offset) * 0.01 * plane.g.mixing_gain;
+    float aileron_mix = SRV_Channels::get_output_scaled(SRV_Channel::k_aileron) * (100.0 + plane.g.mixing_offset) * 0.01 * plane.g.mixing_gain;
+    float rudder_mix = SRV_Channels::get_output_scaled(SRV_Channel::k_rudder) * (100.0 + plane.g.mixing_offset) * 0.01 * plane.g.mixing_gain;
+
+    const float headroom = SERVO_MAX - fabsf(elevator_mix);
+    if (is_positive(headroom)) {
+        if (fabsf(aileron_mix) > headroom) {
+            aileron_mix *= headroom / fabsf(aileron_mix);
+            yaw_lim = true;
+        }
+        if (fabsf(rudder_mix) > headroom) {
+            rudder_mix *= headroom / fabsf(rudder_mix);
+            roll_lim = true;
+        }
+    } else {
+        aileron_mix = 0.0;
+        rudder_mix = 0.0;
+        roll_lim = true;
+        pitch_lim = true;
+        yaw_lim = true;
+    }
+    SRV_Channels::set_output_scaled(SRV_Channel::k_elevon_left, elevator_mix - aileron_mix);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_elevon_right, elevator_mix + aileron_mix);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_vtail_right, elevator_mix - rudder_mix);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_vtail_left, elevator_mix + rudder_mix);
 
     if (roll_lim) {
         motors->limit.roll = true;
@@ -539,8 +596,9 @@ int8_t Tailsitter::get_transition_angle_vtol() const
 void Tailsitter::speed_scaling(void)
 {
     const float hover_throttle = motors->get_throttle_hover();
-    const float throttle = motors->get_throttle();
+    const float throttle = motors->get_throttle_out();
     float spd_scaler = 1.0f;
+    float disk_loading_min_throttle = 0.0;
 
     // Scaleing with throttle
     float throttle_scaler = throttle_scale_max;
@@ -634,6 +692,24 @@ void Tailsitter::speed_scaling(void)
             if (is_positive(sq_outflow)) {
                 spd_scaler = constrain_float(sq_hover_outflow / sq_outflow, gain_scaling_min.get(), throttle_scale_max.get());
             }
+
+            if (is_positive(disk_loading_min_outflow)) {
+                // calculate throttle required to give minimum outflow speed over control surfaces
+                if (is_positive(airspeed)) {
+                    disk_loading_min_throttle = (((sq(disk_loading_min_outflow) - sq(airspeed)) * (0.5 * rho)) / (disk_loading.get() * GRAVITY_MSS)) * hover_throttle;
+                } else {
+                    // estimate backwards airspeed
+                    float reverse_airspeed = 0.0;
+                    Vector3f vel;
+                    if (quadplane.ahrs.get_velocity_NED(vel)) {
+                        reverse_airspeed = quadplane.ahrs.earth_to_body(vel - quadplane.ahrs.wind_estimate()).x;
+                    }
+                    // make sure actually negative
+                    reverse_airspeed = MIN(reverse_airspeed, 0.0);
+                    disk_loading_min_throttle = (((sq(disk_loading_min_outflow) + sq(reverse_airspeed)) * (0.5 * rho)) / (disk_loading.get() * GRAVITY_MSS)) * hover_throttle;
+                }
+                disk_loading_min_throttle = MAX(disk_loading_min_throttle, 0.0);
+            }
         }
 
     } else if ((gain_scaling_mask & TAILSITTER_GSCL_THROTTLE) != 0) {
@@ -662,9 +738,20 @@ void Tailsitter::speed_scaling(void)
         } else {
             v *= spd_scaler;
         }
-        v = constrain_int32(v, -SERVO_MAX, SERVO_MAX);
         SRV_Channels::set_output_scaled(functions[i], v);
     }
+
+    if (tailsitter_motors != nullptr) {
+        tailsitter_motors->set_min_throttle(disk_loading_min_throttle);
+    }
+}
+
+// return true if pitch control should be relaxed
+// on vectored belly sitters the pitch control is not relaxed in order to keep motors pointing and avoid risk of props hitting the ground
+// always relax after a transition
+bool Tailsitter::relax_pitch()
+{
+    return !enabled() || !_is_vectored || (transition->vtol_limit_start_ms != 0);
 }
 
 /*
@@ -739,6 +826,11 @@ void Tailsitter_Transition::VTOL_update()
         if (!quadplane.tailsitter.transition_vtol_complete()) {
             return;
         }
+        // transition to VTOL complete, if armed set vtol rate limit starting point
+        if (hal.util->get_soft_armed()) {
+            vtol_limit_start_ms = now;
+            vtol_limit_initial_pitch = quadplane.ahrs_view->pitch_sensor;
+        }
     }
     restart();
 }
@@ -777,6 +869,38 @@ void Tailsitter_Transition::set_FW_roll_pitch(int32_t& nav_pitch_cd, int32_t& na
         // still in FW, reset transition starting point
         force_transistion_complete();
     }
+}
+
+bool Tailsitter_Transition::set_VTOL_roll_pitch_limit(int32_t& nav_roll_cd, int32_t& nav_pitch_cd)
+{
+    if (vtol_limit_start_ms == 0) {
+        return false;
+    }
+    // prevent pitching towards 0 too quickly
+    const float pitch_change_cd = (AP_HAL::millis() - vtol_limit_start_ms) * tailsitter.transition_rate_vtol * 0.1;
+    if (pitch_change_cd > fabsf(vtol_limit_initial_pitch)) {
+        // limit has passed 0, nothing to do
+        vtol_limit_start_ms = 0;
+        return false;
+    }
+    // continue limiting while limit angle is larger than desired angle
+    if (is_negative(vtol_limit_initial_pitch)) {
+        const float pitch_limit = vtol_limit_initial_pitch + pitch_change_cd;
+        if (nav_pitch_cd > pitch_limit) {
+            nav_pitch_cd = pitch_limit;
+            nav_roll_cd = 0;
+            return true;
+        }
+    } else {
+        const float pitch_limit = vtol_limit_initial_pitch - pitch_change_cd;
+        if (nav_pitch_cd < pitch_limit) {
+            nav_pitch_cd = pitch_limit;
+            nav_roll_cd = 0;
+            return true;
+        }
+    }
+    vtol_limit_start_ms = 0;
+    return false;
 }
 
 // setup for the transition back to fixed wing
