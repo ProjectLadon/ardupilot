@@ -35,7 +35,7 @@ void Copter::check_dynamic_flight(void)
     // with GPS lock use inertial nav to determine if we are moving
     if (position_ok()) {
         // get horizontal speed
-        const float speed = inertial_nav.get_speed_xy();
+        const float speed = inertial_nav.get_speed_xy_cms();
         moving = (speed >= HELI_DYNAMIC_FLIGHT_SPEED_MIN);
     }else{
         // with no GPS lock base it on throttle and forward lean angle
@@ -161,7 +161,7 @@ void Copter::heli_update_rotor_speed_targets()
     uint8_t rsc_control_mode = motors->get_rsc_mode();
 
     switch (rsc_control_mode) {
-        case ROTOR_CONTROL_MODE_SPEED_PASSTHROUGH:
+        case ROTOR_CONTROL_MODE_PASSTHROUGH:
             // pass through pilot desired rotor speed from the RC
             if (get_pilot_desired_rotor_speed() > 0.01) {
                 ap.motor_interlock_switch = true;
@@ -171,19 +171,10 @@ void Copter::heli_update_rotor_speed_targets()
                 motors->set_desired_rotor_speed(0.0f);
             }
             break;
-        case ROTOR_CONTROL_MODE_SPEED_SETPOINT:
-        case ROTOR_CONTROL_MODE_OPEN_LOOP_POWER_OUTPUT:
-        case ROTOR_CONTROL_MODE_CLOSED_LOOP_POWER_OUTPUT:
-            // pass setpoint through as desired rotor speed. Needs work, this is pointless as it is
-            // not used by closed loop control. Being used as a catch-all for other modes regardless
-            // of whether or not they actually use it
-            // set rpm from rotor speed sensor
+        case ROTOR_CONTROL_MODE_SETPOINT:
+        case ROTOR_CONTROL_MODE_THROTTLECURVE:
+        case ROTOR_CONTROL_MODE_AUTOTHROTTLE:
             if (motors->get_interlock()) {
-#if RPM_ENABLED == ENABLED
-                float rpm = -1;
-                rpm_sensor.get_rpm(0, rpm);
-                motors->set_rpm(rpm);
-#endif
                 motors->set_desired_rotor_speed(motors->get_rsc_setpoint());
             }else{
                 motors->set_desired_rotor_speed(0.0f);
@@ -207,8 +198,8 @@ void Copter::heli_update_autorotation()
 {
 #if MODE_AUTOROTATE_ENABLED == ENABLED
     // check if flying and interlock disengaged
-    if (!ap.land_complete && !motors->get_interlock()) {
-        if (!flightmode->has_manual_throttle() && g2.arot.is_enable()) {
+    if (!ap.land_complete && !motors->get_interlock() && g2.arot.is_enable()) {
+        if (!flightmode->has_manual_throttle()) {
             // set autonomous autorotation flight mode
             set_mode(Mode::Number::AUTOROTATE, ModeReason::AUTOROTATION_START);
         }
@@ -220,7 +211,7 @@ void Copter::heli_update_autorotation()
 
     // sets autorotation flags through out libraries
     heli_set_autorotation(heli_flags.in_autorotation);
-    if (!ap.land_complete) {
+    if (!ap.land_complete && g2.arot.is_enable()) {
         motors->set_enable_bailout(true);
     } else {
         motors->set_enable_bailout(false);

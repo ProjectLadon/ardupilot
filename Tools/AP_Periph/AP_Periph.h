@@ -46,11 +46,6 @@
     #endif
 #endif
 
-#if defined(HAL_PERIPH_ENABLE_BATTERY_MPPT_PACKETDIGITAL) && HAL_MAX_CAN_PROTOCOL_DRIVERS < 2
-#error "Battery MPPT PacketDigital driver requires at least two CAN Ports"
-#endif
-
-
 #include "Parameters.h"
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
@@ -194,6 +189,12 @@ public:
 #endif
 
 #ifdef HAL_PERIPH_ENABLE_RC_OUT
+#if HAL_WITH_ESC_TELEM
+    AP_ESC_Telem esc_telem;
+    uint32_t last_esc_telem_update_ms;
+    void esc_telem_update();
+#endif
+
     SRV_Channels servo_channels;
     bool rcout_has_new_data_to_update;
 
@@ -219,13 +220,13 @@ public:
     // Handled under LUA script to control LEDs
     float get_yaw_earth() { return yaw_earth; }
     uint32_t get_vehicle_state() { return vehicle_state; }
-#elif defined(ENABLE_SCRIPTING)
+#elif defined(AP_SCRIPTING_ENABLED)
     // create dummy methods for the case when the user doesn't want to use the notify object
     float get_yaw_earth() { return 0.0; }
     uint32_t get_vehicle_state() { return 0.0; }
 #endif
 
-#ifdef ENABLE_SCRIPTING
+#if AP_SCRIPTING_ENABLED
     AP_Scripting scripting;
 #endif
 

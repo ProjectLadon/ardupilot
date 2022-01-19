@@ -79,6 +79,27 @@ inline bool is_negative(const T fVal1) {
 
 
 /*
+ * @brief: Check whether a double is zero
+ */
+inline bool is_zero(const double fVal1) {
+    return (fabsf(fVal1) < static_cast<double>(FLT_EPSILON));
+}
+
+/*
+ * @brief: Check whether a double is greater than zero
+ */
+inline bool is_positive(const double fVal1) {
+    return (fVal1 >= static_cast<double>(FLT_EPSILON));
+}
+
+/*
+ * @brief: Check whether a double is less than zero
+ */
+inline bool is_negative(const double fVal1) {
+    return (fVal1 <= static_cast<double>((-1.0 * FLT_EPSILON)));
+}
+
+/*
  * A variant of asin() that checks the input ranges and ensures a valid angle
  * as output. If nan is given as input then zero is returned.
  */
@@ -324,3 +345,7 @@ uint16_t float2fixed(const float input, const uint8_t fractional_bits = 8);
   fixed wing aircraft
  */
 float fixedwing_turn_rate(float bank_angle_deg, float airspeed);
+
+// convert degrees farenheight to Kelvin
+float degF_to_Kelvin(float temp_f);
+

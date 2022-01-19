@@ -30,7 +30,7 @@
 // flybar types
 #define AP_MOTORS_HELI_NOFLYBAR                 0
 
-// rsc function output channels. 
+// rsc function output channels.
 #define AP_MOTORS_HELI_RSC                      CH_8
 
 class AP_HeliControls;
@@ -86,9 +86,6 @@ public:
 
     // get_rsc_setpoint - gets contents of _rsc_setpoint parameter (0~1)
     float get_rsc_setpoint() const { return _main_rotor._rsc_setpoint.get() * 0.01f; }
-    
-    // set_rpm - for rotor speed governor
-    virtual void set_rpm(float rotor_rpm) = 0;
 
     // set_desired_rotor_speed - sets target rotor speed as a number from 0 ~ 1
     virtual void set_desired_rotor_speed(float desired_speed) = 0;
@@ -104,10 +101,10 @@ public:
 
     // rotor_speed_above_critical - return true if rotor speed is above that critical for flight
     virtual bool rotor_speed_above_critical() const = 0;
-    
+
     //get rotor governor output
     virtual float get_governor_output() const = 0;
-    
+
     //get engine throttle output
     virtual float get_control_output() const = 0;
 
@@ -150,7 +147,7 @@ public:
 
     // set land complete flag
     void set_land_complete(bool landed) { _heliflags.land_complete = landed; }
-    
+
     // enum for heli optional features
     enum class HeliOption {
         USE_LEAKY_I                     = (1<<0),   // 1
@@ -158,11 +155,9 @@ public:
 
     // use leaking integrator management scheme
     bool using_leaky_integrator() const { return heli_option(HeliOption::USE_LEAKY_I); }
-    
+
     // var_info for holding Parameter information
     static const struct AP_Param::GroupInfo var_info[];
-
-    const char* get_frame_string() const override { return "HELI"; }
 
 protected:
 
@@ -230,6 +225,8 @@ protected:
     // updates the takeoff collective flag indicating that current collective is greater than collective required to indicate takeoff.
     void update_takeoff_collective_flag(float coll_out);
 
+    const char* _get_frame_string() const override { return "HELI"; }
+
     // enum values for HOVER_LEARN parameter
     enum HoverLearn {
         HOVER_LEARN_DISABLED = 0,
@@ -250,6 +247,7 @@ protected:
         uint8_t land_complete           : 1;    // true if aircraft is landed
         uint8_t takeoff_collective      : 1;    // true if collective is above 30% between H_COL_MID and H_COL_MAX
         uint8_t below_land_min_coll     : 1;    // true if collective is below H_COL_LAND_MIN
+        uint8_t rotor_spooldown_complete : 1;    // true if the rotors have spooled down completely
     } _heliflags;
 
     // parameters

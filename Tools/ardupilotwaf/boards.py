@@ -48,6 +48,10 @@ class Board:
         env.SRCROOT = srcpath('')
         self.configure_env(cfg, env)
 
+        env.DEFINES.update(
+            AP_SCRIPTING_ENABLED = 0,
+        )
+
         # Setup scripting, had to defer this to allow checking board size
         if ((not cfg.options.disable_scripting) and
             (not cfg.env.DISABLE_SCRIPTING) and
@@ -56,7 +60,7 @@ class Board:
              (cfg.env.BOARD_FLASH_SIZE > 1024))):
 
             env.DEFINES.update(
-                ENABLE_SCRIPTING = 1,
+                AP_SCRIPTING_ENABLED = 1,
                 LUA_32BITS = 1,
                 )
 
@@ -216,6 +220,9 @@ class Board:
                 '-lgcov',
                 '-coverage',
             ]
+            env.DEFINES.update(
+                HAL_COVERAGE_BUILD = 1,
+            )
 
         if cfg.options.bootloader:
             # don't let bootloaders try and pull scripting in
@@ -313,8 +320,12 @@ class Board:
             if self.cc_version_gte(cfg, 7, 4):
                 env.CXXFLAGS += [
                     '-Werror=implicit-fallthrough',
-                    '-Wmaybe-uninitialized',
-                    '-Wduplicated-cond',
+                    '-Werror=maybe-uninitialized',
+                    '-Werror=duplicated-cond',
+                ]
+            if self.cc_version_gte(cfg, 8, 4):
+                env.CXXFLAGS += [
+                    '-Werror=sizeof-pointer-div',
                 ]
 
         if cfg.options.Werror:
@@ -430,6 +441,15 @@ def add_dynamic_boards_chibios():
         hwdef = os.path.join(dirname, d, 'hwdef.dat')
         if os.path.exists(hwdef):
             newclass = type(d, (chibios,), {'name': d})
+
+@conf
+def get_chibios_board_cls(ctx, name, hwdef):
+    if name in _board_classes.keys():
+        _board_classes[name].hwdef = hwdef
+        return _board_classes[name]
+    newclass = type(name, (chibios,), {'name': name})
+    newclass.hwdef = hwdef
+    return newclass
 
 def add_dynamic_boards_esp32():
     '''add boards based on existance of hwdef.dat in subdirectories for ESP32'''
@@ -751,6 +771,8 @@ class chibios(Board):
     toolchain = 'arm-none-eabi'
 
     def configure_env(self, cfg, env):
+        if hasattr(self, 'hwdef'):
+            cfg.env.HWDEF = self.hwdef
         super(chibios, self).configure_env(cfg, env)
 
         cfg.load('chibios')
@@ -814,7 +836,6 @@ class chibios(Board):
             '-Wno-error=double-promotion',
             '-Wno-error=missing-declarations',
             '-Wno-error=float-equal',
-            '-Wno-error=undef',
             '-Wno-error=cpp',
             ]
 

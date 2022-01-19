@@ -133,13 +133,13 @@ private:
     void _parse_command_line(int argc, char * const argv[]);
     void _set_param_default(const char *parm);
     void _usage(void);
-    void _sitl_setup(const char *home_str);
+    void _sitl_setup();
     void _setup_fdm(void);
     void _setup_timer(void);
     void _setup_adc(void);
 
     void set_height_agl(void);
-    void _update_rangefinder(float range_value);
+    void _update_rangefinder();
     void _set_signal_handlers(void) const;
 
     void _update_airspeed(float airspeed);
@@ -176,19 +176,7 @@ private:
     const char *_fg_address;
 
     // delay buffer variables
-    static const uint8_t mag_buffer_length = 250;
     static const uint8_t wind_buffer_length = 50;
-
-    // magnetometer delay buffer variables
-    struct readings_mag {
-        uint32_t time;
-        Vector3f data;
-    };
-    uint8_t store_index_mag;
-    uint32_t last_store_time_mag;
-    VectorN<readings_mag,mag_buffer_length> buffer_mag;
-    uint32_t time_delta_mag;
-    uint32_t delayed_time_mag;
 
     // airspeed sensor delay buffer variables
     struct readings_wind {
@@ -206,12 +194,16 @@ private:
     // internal SITL model
     SITL::Aircraft *sitl_model;
 
+#if HAL_SIM_GIMBAL_ENABLED
     // simulated gimbal
     bool enable_gimbal;
     SITL::Gimbal *gimbal;
+#endif
 
+#if HAL_SIM_ADSB_ENABLED
     // simulated ADSb
     SITL::ADSB *adsb;
+#endif
 
     // simulated vicon system:
     SITL::Vicon *vicon;
@@ -253,19 +245,27 @@ private:
     // SITL::Frsky_SPort *frsky_sport;
     // SITL::Frsky_SPortPassthrough *frsky_sportpassthrough;
 
+#if HAL_SIM_PS_RPLIDARA2_ENABLED
     // simulated RPLidarA2:
     SITL::PS_RPLidarA2 *rplidara2;
+#endif
 
     // simulated FETtec OneWire ESCs:
     SITL::FETtecOneWireESC *fetteconewireesc;
 
+#if HAL_SIM_PS_LIGHTWARE_SF45B_ENABLED
     // simulated SF45B proximity sensor:
     SITL::PS_LightWare_SF45B *sf45b;
+#endif
 
+#if HAL_SIM_PS_TERARANGERTOWER_ENABLED
     SITL::PS_TeraRangerTower *terarangertower;
+#endif
 
+#if AP_SIM_CRSF_ENABLED
     // simulated CRSF devices
     SITL::CRSF *crsf;
+#endif
 
     // simulated VectorNav system:
     SITL::VectorNav *vectornav;
@@ -273,11 +273,15 @@ private:
     // simulated LORD Microstrain system
     SITL::LORD *lord;
 
+#if HAL_SIM_JSON_MASTER_ENABLED
     // Ride along instances via JSON SITL backend
     SITL::JSON_Master ride_along;
+#endif
 
+#if HAL_SIM_AIS_ENABLED
     // simulated AIS stream
     SITL::AIS *ais;
+#endif
 
     // simulated EFI MegaSquirt device:
     SITL::EFI_MegaSquirt *efi_ms;
@@ -287,11 +291,15 @@ private:
     
     const char *defaults_path = HAL_PARAM_DEFAULTS_PATH;
 
-    const char *_home_str;
     char *_gps_fifo[2];
 
     // simulated GPS devices
     SITL::GPS *gps[2];  // constrained by # of parameter sets
+
+    // returns a voltage between 0V to 5V which should appear as the
+    // voltage from the sensor
+    float _sonar_pin_voltage() const;
+
 };
 
 #endif // defined(HAL_BUILD_AP_PERIPH)

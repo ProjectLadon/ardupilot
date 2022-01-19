@@ -40,7 +40,6 @@
 #include <AP_Mount/AP_Mount.h>
 #include <AP_Common/AP_FWVersion.h>
 #include <AP_VisualOdom/AP_VisualOdom.h>
-#include <AP_OpticalFlow/OpticalFlow.h>
 #include <AP_Baro/AP_Baro.h>
 #include <AP_EFI/AP_EFI.h>
 #include <AP_Proximity/AP_Proximity.h>
@@ -160,22 +159,11 @@ bool GCS_MAVLINK::init(uint8_t instance)
     if (mavlink_protocol == AP_SerialManager::SerialProtocol_MAVLink2) {
         // load signing key
         load_signing_key();
-
-        if (status->signing == nullptr) {
-            // if signing is off start by sending MAVLink1.
-            status->flags |= MAVLINK_STATUS_FLAG_OUT_MAVLINK1;
-        }
     } else if (status) {
         // user has asked to only send MAVLink1
         status->flags |= MAVLINK_STATUS_FLAG_OUT_MAVLINK1;
     }
-
-    if (chan == MAVLINK_COMM_0) {
-        // Always start with MAVLink1 on first port for now, to allow for recovery
-        // after experiments with MAVLink2
-        status->flags |= MAVLINK_STATUS_FLAG_OUT_MAVLINK1;
-    }
-
+    
     return true;
 }
 
@@ -306,7 +294,7 @@ void GCS_MAVLINK::send_battery_status(const uint8_t instance) const
                                     battery.get_mavlink_charge_state(instance), // battery charge state
                                     cell_volts_ext, // Cell 11..14 voltages
                                     0, // battery mode
-                                    0); // fault_bitmask
+                                    battery.get_mavlink_fault_bitmask(instance));   // fault_bitmask
 #else
     (void)instance;
 #endif
@@ -341,6 +329,15 @@ void GCS_MAVLINK::send_distance_sensor(const AP_RangeFinder_Backend *sensor, con
         return;
     }
 
+    uint8_t quality_pct = 0;
+    uint8_t quality;
+    if (sensor->get_signal_quality_pct(quality_pct)) {
+        // mavlink defines this field as 0 is unknown, 1 is invalid, 100 is perfect
+        quality = MAX(quality_pct, 1);
+    } else {
+        quality = 0;
+    }
+
     mavlink_msg_distance_sensor_send(
         chan,
         AP_HAL::millis(),                        // time since system boot TODO: take time of measurement
@@ -354,7 +351,7 @@ void GCS_MAVLINK::send_distance_sensor(const AP_RangeFinder_Backend *sensor, con
         0,                                       // horizontal FOV
         0,                                       // vertical FOV
         (const float *)nullptr,                  // quaternion of sensor orientation for MAV_SENSOR_ROTATION_CUSTOM
-        0);                                      // Signal quality of the sensor. 0 = unknown/unset signal quality, 1 = invalid signal, 100 = perfect signal.
+        quality);                                // Signal quality of the sensor. 0 = unknown/unset signal quality, 1 = invalid signal, 100 = perfect signal.
 }
 // send any and all distance_sensor messages.  This starts by sending
 // any distance sensors not used by a Proximity sensor, then sends the
@@ -1654,7 +1651,7 @@ void GCS_MAVLINK::log_mavlink_stats()
 /*
   send the SYSTEM_TIME message
  */
-void GCS_MAVLINK::send_system_time()
+void GCS_MAVLINK::send_system_time() const
 {
     uint64_t time_unix = 0;
     AP::rtc().get_utc_usec(time_unix); // may fail, leaving time_unix at 0
@@ -1772,15 +1769,17 @@ void GCS_MAVLINK::send_scaled_imu(uint8_t instance, void (*send_fn)(mavlink_chan
 #if HAL_INS_ENABLED
     const AP_InertialSensor &ins = AP::ins();
     const Compass &compass = AP::compass();
+    int16_t _temperature = 0;
 
     bool have_data = false;
     Vector3f accel{};
     if (ins.get_accel_count() > instance) {
         accel = ins.get_accel(instance);
+        _temperature = ins.get_temperature(instance)*100;
         have_data = true;
     }
     Vector3f gyro{};
-    if (ins.get_accel_count() > instance) {
+    if (ins.get_gyro_count() > instance) {
         gyro = ins.get_gyro(instance);
         have_data = true;
     }
@@ -1804,7 +1803,7 @@ void GCS_MAVLINK::send_scaled_imu(uint8_t instance, void (*send_fn)(mavlink_chan
         mag.x,
         mag.y,
         mag.z,
-        int16_t(ins.get_temperature(instance)*100));
+        _temperature);
 #endif
 }
 
@@ -2223,6 +2222,9 @@ void GCS::setup_uarts()
     }
 #if !HAL_MINIMIZE_FEATURES
     ltm_telemetry.init();
+#endif
+
+#if AP_DEVO_TELEM_ENABLED
     devo_telemetry.init();
 #endif
 }
@@ -2308,6 +2310,7 @@ MAV_RESULT GCS_MAVLINK::_set_mode_common(const MAV_MODE _base_mode, const uint32
     return MAV_RESULT_DENIED;
 }
 
+#if AP_OPTICALFLOW_ENABLED
 /*
   send OPTICAL_FLOW message
  */
@@ -2344,6 +2347,7 @@ void GCS_MAVLINK::send_opticalflow()
         flowRate.x,
         flowRate.y);
 }
+#endif  // AP_OPTICALFLOW_ENABLED
 
 /*
   send AUTOPILOT_VERSION packet
@@ -3193,6 +3197,44 @@ void GCS_MAVLINK::handle_vicon_position_estimate(const mavlink_message_t &msg)
                                                 PAYLOAD_SIZE(chan, VICON_POSITION_ESTIMATE));
 }
 
+/*
+  handle ODOMETRY message. This message combines position, velocity
+  and attitude data
+ */
+void GCS_MAVLINK::handle_odometry(const mavlink_message_t &msg)
+{
+#if HAL_VISUALODOM_ENABLED
+    AP_VisualOdom *visual_odom = AP::visualodom();
+    if (visual_odom == nullptr) {
+        return;
+    }
+
+    mavlink_odometry_t m;
+    mavlink_msg_odometry_decode(&msg, &m);
+
+    if (m.frame_id != MAV_FRAME_LOCAL_FRD ||
+        m.child_frame_id != MAV_FRAME_BODY_FRD) {
+        // only support local FRD frame data
+        return;
+    }
+
+    Quaternion q{m.q[0],m.q[1],m.q[2],m.q[3]};
+
+    float posErr = 0;
+    float angErr = 0;
+    if (!isnan(m.pose_covariance[0])) {
+        posErr = cbrtf(sq(m.pose_covariance[0])+sq(m.pose_covariance[6])+sq(m.pose_covariance[11]));
+        angErr = cbrtf(sq(m.pose_covariance[15])+sq(m.pose_covariance[18])+sq(m.pose_covariance[20]));
+    }
+    
+    const uint32_t timestamp_ms = correct_offboard_timestamp_usec_to_ms(m.time_usec, PAYLOAD_SIZE(chan, ODOMETRY));
+    visual_odom->handle_vision_position_estimate(m.time_usec, timestamp_ms, m.x, m.y, m.z, q, posErr, angErr, m.reset_counter);
+
+    const Vector3f vel{m.vx, m.vy, m.vz};
+    visual_odom->handle_vision_speed_estimate(m.time_usec, timestamp_ms, vel, m.reset_counter);
+#endif
+}
+
 // there are several messages which all have identical fields in them.
 // This function provides common handling for the data contained in
 // these packets
@@ -3241,7 +3283,7 @@ void GCS_MAVLINK::handle_att_pos_mocap(const mavlink_message_t &msg)
         return;
     }
     // note: att_pos_mocap does not include reset counter
-    visual_odom->handle_vision_position_estimate(m.time_usec, timestamp_ms, m.x, m.y, m.z, m.q, 0);
+    visual_odom->handle_vision_position_estimate(m.time_usec, timestamp_ms, m.x, m.y, m.z, m.q, 0, 0, 0);
 #endif
 }
 
@@ -3323,8 +3365,7 @@ void GCS_MAVLINK::handle_rc_channels_override(const mavlink_message_t &msg)
 
 }
 
-// allow override of RC channel values for HIL or for complete GCS
-// control of switch position and RC PWM values.
+#if AP_OPTICALFLOW_ENABLED
 void GCS_MAVLINK::handle_optical_flow(const mavlink_message_t &msg)
 {
     OpticalFlow *optflow = AP::opticalflow();
@@ -3333,6 +3374,7 @@ void GCS_MAVLINK::handle_optical_flow(const mavlink_message_t &msg)
     }
     optflow->handle_msg(msg);
 }
+#endif
 
 
 /*
@@ -3558,7 +3600,10 @@ void GCS_MAVLINK::handle_common_message(const mavlink_message_t &msg)
         break;
 
     case MAVLINK_MSG_ID_REQUEST_DATA_STREAM:
-        handle_request_data_stream(msg);
+        // only pass if override is not selected 
+        if (!(_port->get_options() & _port->OPTION_NOSTREAMOVERRIDE)) {
+            handle_request_data_stream(msg);
+        }
         break;
 
     case MAVLINK_MSG_ID_DATA96:
@@ -3581,6 +3626,10 @@ void GCS_MAVLINK::handle_common_message(const mavlink_message_t &msg)
         handle_vicon_position_estimate(msg);
         break;
 
+    case MAVLINK_MSG_ID_ODOMETRY:
+        handle_odometry(msg);
+        break;
+        
     case MAVLINK_MSG_ID_ATT_POS_MOCAP:
         handle_att_pos_mocap(msg);
         break;
@@ -3597,9 +3646,11 @@ void GCS_MAVLINK::handle_common_message(const mavlink_message_t &msg)
         handle_rc_channels_override(msg);
         break;
 
+#if AP_OPTICALFLOW_ENABLED
     case MAVLINK_MSG_ID_OPTICAL_FLOW:
         handle_optical_flow(msg);
         break;
+#endif
 
     case MAVLINK_MSG_ID_DISTANCE_SENSOR:
         handle_distance_sensor(msg);
@@ -4609,7 +4660,15 @@ MAV_RESULT GCS_MAVLINK::handle_command_int_packet(const mavlink_command_int_t &p
         return handle_command_do_set_roi_sysid(packet);
     case MAV_CMD_DO_SET_HOME:
         return handle_command_int_do_set_home(packet);
-#ifdef ENABLE_SCRIPTING
+    case MAV_CMD_STORAGE_FORMAT: {
+        if (!is_equal(packet.param1, 1.0f) ||
+            !is_equal(packet.param2, 1.0f)) {
+            return MAV_RESULT_UNSUPPORTED;
+        }
+        return AP::FS().format() ? MAV_RESULT_ACCEPTED : MAV_RESULT_FAILED;
+    }
+
+#if AP_SCRIPTING_ENABLED
     case MAV_CMD_SCRIPTING:
         {
             AP_Scripting *scripting = AP_Scripting::get_singleton();
@@ -4618,7 +4677,7 @@ MAV_RESULT GCS_MAVLINK::handle_command_int_packet(const mavlink_command_int_t &p
             }
             return scripting->handle_command_int_packet(packet);
         }
-#endif // ENABLE_SCRIPTING
+#endif // AP_SCRIPTING_ENABLED
     default:
         break;
     }
@@ -5128,8 +5187,10 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
         break;
 
     case MSG_OPTICAL_FLOW:
+#if AP_OPTICALFLOW_ENABLED
         CHECK_PAYLOAD_SIZE(OPTICAL_FLOW);
         send_opticalflow();
+#endif
         break;
 
     case MSG_POSITION_TARGET_GLOBAL_INT:

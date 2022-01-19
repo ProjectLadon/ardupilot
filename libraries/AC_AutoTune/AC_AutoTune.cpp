@@ -527,7 +527,7 @@ void AC_AutoTune::control_attitude()
 
         float target_max_rate;
         switch (axis) {
-        case ROLL:
+        case ROLL: {
             target_max_rate = MAX(AUTOTUNE_TARGET_MIN_RATE_RLLPIT_CDS, step_scaler*AUTOTUNE_TARGET_RATE_RLLPIT_CDS);
             target_rate = constrain_float(ToDeg(attitude_control->max_rate_step_bf_roll())*100.0f, AUTOTUNE_TARGET_MIN_RATE_RLLPIT_CDS, target_max_rate);
             target_angle = constrain_float(ToDeg(attitude_control->max_angle_step_bf_roll())*100.0f, AUTOTUNE_TARGET_MIN_ANGLE_RLLPIT_CD, AUTOTUNE_TARGET_ANGLE_RLLPIT_CD);
@@ -536,7 +536,8 @@ void AC_AutoTune::control_attitude()
             start_angle = ahrs_view->roll_sensor;
             rotation_rate_filt.set_cutoff_frequency(attitude_control->get_rate_roll_pid().filt_D_hz()*2.0f);
             break;
-        case PITCH:
+        }
+        case PITCH: {
             target_max_rate = MAX(AUTOTUNE_TARGET_MIN_RATE_RLLPIT_CDS, step_scaler*AUTOTUNE_TARGET_RATE_RLLPIT_CDS);
             target_rate = constrain_float(ToDeg(attitude_control->max_rate_step_bf_pitch())*100.0f, AUTOTUNE_TARGET_MIN_RATE_RLLPIT_CDS, target_max_rate);
             target_angle = constrain_float(ToDeg(attitude_control->max_angle_step_bf_pitch())*100.0f, AUTOTUNE_TARGET_MIN_ANGLE_RLLPIT_CD, AUTOTUNE_TARGET_ANGLE_RLLPIT_CD);
@@ -545,7 +546,8 @@ void AC_AutoTune::control_attitude()
             start_angle = ahrs_view->pitch_sensor;
             rotation_rate_filt.set_cutoff_frequency(attitude_control->get_rate_pitch_pid().filt_D_hz()*2.0f);
             break;
-        case YAW:
+        }
+        case YAW: {
             target_max_rate = MAX(AUTOTUNE_TARGET_MIN_RATE_RLLPIT_CDS, step_scaler*AUTOTUNE_TARGET_RATE_YAW_CDS);
             target_rate = constrain_float(ToDeg(attitude_control->max_rate_step_bf_yaw()*0.75f)*100.0f, AUTOTUNE_TARGET_MIN_RATE_YAW_CDS, target_max_rate);
             target_angle = constrain_float(ToDeg(attitude_control->max_angle_step_bf_yaw()*0.75f)*100.0f, AUTOTUNE_TARGET_MIN_ANGLE_YAW_CD, AUTOTUNE_TARGET_ANGLE_YAW_CD);
@@ -554,6 +556,7 @@ void AC_AutoTune::control_attitude()
             start_angle = ahrs_view->yaw_sensor;
             rotation_rate_filt.set_cutoff_frequency(AUTOTUNE_Y_FILT_FREQ);
             break;
+        }
         }
         if ((tune_type == SP_DOWN) || (tune_type == SP_UP)) {
             rotation_rate_filt.reset(start_rate);
@@ -1671,7 +1674,7 @@ void AC_AutoTune::get_poshold_attitude(float &roll_cd_out, float &pitch_cd_out, 
 
     if (!have_position) {
         have_position = true;
-        start_position = inertial_nav->get_position();
+        start_position = inertial_nav->get_position_neu_cm();
     }
 
     // don't go past 10 degrees, as autotune result would deteriorate too much
@@ -1684,7 +1687,7 @@ void AC_AutoTune::get_poshold_attitude(float &roll_cd_out, float &pitch_cd_out, 
     // target position. That corresponds to a lean angle of 2.5 degrees
     const float yaw_dist_limit_cm = 500;
 
-    Vector3f pdiff = inertial_nav->get_position() - start_position;
+    Vector3f pdiff = inertial_nav->get_position_neu_cm() - start_position;
     pdiff.z = 0;
     float dist_cm = pdiff.length();
     if (dist_cm < 10) {

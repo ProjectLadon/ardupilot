@@ -53,13 +53,13 @@ void Copter::Log_Write_Control_Tuning()
         throttle_out        : motors->get_throttle(),
         throttle_hover      : motors->get_throttle_hover(),
         desired_alt         : des_alt_m,
-        inav_alt            : inertial_nav.get_altitude() / 100.0f,
+        inav_alt            : inertial_nav.get_position_z_up_cm() * 0.01f,
         baro_alt            : baro_alt,
         desired_rangefinder_alt : desired_rangefinder_alt,
         rangefinder_alt     : surface_tracking.get_dist_for_logging(),
         terr_alt            : terr_alt,
         target_climb_rate   : target_climb_rate_cms,
-        climb_rate          : int16_t(inertial_nav.get_velocity_z()) // float -> int16_t
+        climb_rate          : int16_t(inertial_nav.get_velocity_z_up_cms()) // float -> int16_t
     };
     logger.WriteBlock(&pkt, sizeof(pkt));
 }
@@ -92,31 +92,6 @@ void Copter::Log_Write_EKF_POS()
     sitl.Log_Write_SIMSTATE();
 #endif
     ahrs.Write_POS();
-}
-
-struct PACKED log_MotBatt {
-    LOG_PACKET_HEADER;
-    uint64_t time_us;
-    float   lift_max;
-    float   bat_volt;
-    float   bat_res;
-    float   th_limit;
-};
-
-// Write an rate packet
-void Copter::Log_Write_MotBatt()
-{
-#if FRAME_CONFIG != HELI_FRAME
-    struct log_MotBatt pkt_mot = {
-        LOG_PACKET_HEADER_INIT(LOG_MOTBATT_MSG),
-        time_us         : AP_HAL::micros64(),
-        lift_max        : (float)(motors->get_lift_max()),
-        bat_volt        : (float)(motors->get_batt_voltage_filt()),
-        bat_res         : (float)(battery.get_resistance()),
-        th_limit        : (float)(motors->get_throttle_limit())
-    };
-    logger.WriteBlock(&pkt_mot, sizeof(pkt_mot));
-#endif
 }
 
 struct PACKED log_Data_Int16t {
@@ -467,17 +442,6 @@ const struct LogStructure Copter::log_structure[] = {
 
     { LOG_CONTROL_TUNING_MSG, sizeof(log_Control_Tuning),
       "CTUN", "Qffffffefffhh", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CRt", "s----mmmmmmnn", "F----00B000BB" , true },
-    
-// @LoggerMessage: MOTB
-// @Description: Battery information
-// @Field: TimeUS: Time since system startup
-// @Field: LiftMax: Maximum motor compensation gain
-// @Field: BatVolt: Ratio betwen detected battery voltage and maximum battery voltage
-// @Field: BatRes: Estimated battery resistance
-// @Field: ThLimit: Throttle limit set due to battery current limitations
-
-    { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
-      "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" , true },
     { LOG_DATA_INT16_MSG, sizeof(log_Data_Int16t),         
       "D16",   "QBh",         "TimeUS,Id,Value", "s--", "F--" },
     { LOG_DATA_UINT16_MSG, sizeof(log_Data_UInt16t),         
@@ -572,7 +536,6 @@ void Copter::log_init(void)
 void Copter::Log_Write_Control_Tuning() {}
 void Copter::Log_Write_Attitude(void) {}
 void Copter::Log_Write_EKF_POS() {}
-void Copter::Log_Write_MotBatt() {}
 void Copter::Log_Write_Data(LogDataID id, int32_t value) {}
 void Copter::Log_Write_Data(LogDataID id, uint32_t value) {}
 void Copter::Log_Write_Data(LogDataID id, int16_t value) {}

@@ -87,8 +87,10 @@ public:
     // save/load key persistent parameters in bootloader sector
     bool load_persistent_params(ExpandingString &str) const override;
 #endif
+#if HAL_UART_STATS_ENABLED
     // request information on uart I/O
     virtual void uart_info(ExpandingString &str) override;
+#endif
 
     // returns random values
     bool get_random_vals(uint8_t* data, size_t size) override;
@@ -139,9 +141,10 @@ private:
     // log info on stack usage
     void log_stack_info(void) override;
 
-#if defined(HAL_CRASH_DUMP_FLASHPAGE) && !defined(HAL_BOOTLOADER_BUILD)
+#if !defined(HAL_BOOTLOADER_BUILD)
     // get last crash dump
-    void last_crash_dump(ExpandingString &str) const override;
+    size_t last_crash_dump_size() const override;
+    void* last_crash_dump_ptr() const override;
 #endif
 
 };

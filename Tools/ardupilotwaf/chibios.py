@@ -205,7 +205,7 @@ class set_app_descriptor(Task.Task):
         desc_len = 16
         crc1 = to_unsigned(crc32(bytearray(img[:offset])))
         crc2 = to_unsigned(crc32(bytearray(img[offset+desc_len:])))
-        githash = to_unsigned(int('0x' + self.generator.bld.git_head_hash(short=True),16))
+        githash = to_unsigned(int('0x' + os.environ.get('GIT_VERSION', self.generator.bld.git_head_hash(short=True)),16))
         desc = struct.pack('<IIII', crc1, crc2, len(img), githash)
         img = img[:offset] + desc + img[offset+desc_len:]
         Logs.info("Applying %s APP_DESCRIPTOR %08x%08x" % (self.env.APP_DESCRIPTOR, crc1, crc2))
@@ -243,6 +243,10 @@ class generate_apj(Task.Task):
             "board_revision": 0,
             "USBID": self.env.USBID
         }
+        if self.env.MANUFACTURER:
+            d["manufacturer"] = self.env.MANUFACTURER
+        if self.env.BRAND_NAME:
+            d["brand_name"] = self.env.BRAND_NAME
         if self.env.build_dates:
             # we omit build_time when we don't have build_dates so that apj
             # file is idential for same git hash and compiler
@@ -455,13 +459,18 @@ def configure(cfg):
 def generate_hwdef_h(env):
     '''run chibios_hwdef.py'''
     import subprocess
-
     if env.BOOTLOADER:
-        env.HWDEF = os.path.join(env.SRCROOT, 'libraries/AP_HAL_ChibiOS/hwdef/%s/hwdef-bl.dat' % env.BOARD)
+        if len(env.HWDEF) == 0:
+            env.HWDEF = os.path.join(env.SRCROOT, 'libraries/AP_HAL_ChibiOS/hwdef/%s/hwdef-bl.dat' % env.BOARD)
+        else:
+            # update to using hwdef-bl.dat
+            env.HWDEF = env.HWDEF.replace('hwdef.dat', 'hwdef-bl.dat')
         env.BOOTLOADER_OPTION="--bootloader"
     else:
-        env.HWDEF = os.path.join(env.SRCROOT, 'libraries/AP_HAL_ChibiOS/hwdef/%s/hwdef.dat' % env.BOARD)
+        if len(env.HWDEF) == 0:
+            env.HWDEF = os.path.join(env.SRCROOT, 'libraries/AP_HAL_ChibiOS/hwdef/%s/hwdef.dat' % env.BOARD)
         env.BOOTLOADER_OPTION=""
+
     hwdef_script = os.path.join(env.SRCROOT, 'libraries/AP_HAL_ChibiOS/hwdef/scripts/chibios_hwdef.py')
     hwdef_out = env.BUILDROOT
     if not os.path.exists(hwdef_out):

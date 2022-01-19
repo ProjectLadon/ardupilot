@@ -690,9 +690,28 @@ struct PACKED log_STAK {
 struct PACKED log_File {
     LOG_PACKET_HEADER;
     char filename[16];
-    uint16_t offset;
-    uint16_t length;
+    uint32_t offset;
+    uint8_t length;
     char data[64];
+};
+
+struct PACKED log_Scripting {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    char name[16];
+    uint32_t run_time;
+    int32_t total_mem;
+    int32_t run_mem;
+};
+
+struct PACKED log_MotBatt {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    float   lift_max;
+    float   bat_volt;
+    float   th_limit;
+    float th_average_max;
+    uint8_t mot_fail_flags;
 };
 
 // FMT messages define all message formats other than FMT
@@ -1211,6 +1230,23 @@ struct PACKED log_File {
 // @Field: Free: free stack
 // @Field: Name: thread name
 
+// @LoggerMessage: SCR
+// @Description: Scripting runtime stats
+// @Field: TimeUS: Time since system startup
+// @Field: Name: script name
+// @Field: Runtime: run time
+// @Field: Total_mem: total memory useage
+// @Field: Run_mem: run memory usage
+
+// @LoggerMessage: MOTB
+// @Description: Motor mixer information
+// @Field: TimeUS: Time since system startup
+// @Field: LiftMax: Maximum motor compensation gain
+// @Field: BatVolt: Ratio betwen detected battery voltage and maximum battery voltage
+// @Field: ThLimit: Throttle limit set due to battery current limitations
+// @Field: ThrAvMx: Maximum average throttle that can be used to maintain attitude controll, derived from throttle mix params
+// @Field: FailFlags: bit 0 motor failed, bit 1 motors balanced, should be 2 in normal flight
+
 // messages for all boards
 #define LOG_COMMON_STRUCTURES \
     { LOG_FORMAT_MSG, sizeof(log_Format), \
@@ -1327,14 +1363,18 @@ LOG_STRUCTURE_FROM_VISUALODOM \
     { LOG_STAK_MSG, sizeof(log_STAK), \
       "STAK", "QBBHHN", "TimeUS,Id,Pri,Total,Free,Name", "s#----", "F-----", true }, \
     { LOG_FILE_MSG, sizeof(log_File), \
-      "FILE",   "NhhZ",       "FileName,Offset,Length,Data", "----", "----" }, \
-LOG_STRUCTURE_FROM_AIS \
+      "FILE",   "NIBZ",       "FileName,Offset,Length,Data", "----", "----" }, \
+LOG_STRUCTURE_FROM_AIS, \
+    { LOG_SCRIPTING_MSG, sizeof(log_Scripting), \
+      "SCR",   "QNIii", "TimeUS,Name,Runtime,Total_mem,Run_mem", "s-sbb", "F-F--", true }, \
+    { LOG_MOTBATT_MSG, sizeof(log_MotBatt), \
+      "MOTB", "QffffB",  "TimeUS,LiftMax,BatVolt,ThLimit,ThrAvMx,FailFlags", "s-----", "F-----" , true }
 
 // message types 0 to 63 reserved for vehicle specific use
 
 // message types for common messages
 enum LogMessages : uint8_t {
-    LOG_PARAMETER_MSG = 64,
+    LOG_PARAMETER_MSG = 32,
     LOG_IDS_FROM_NAVEKF2,
     LOG_IDS_FROM_NAVEKF3,
     LOG_MESSAGE_MSG,
@@ -1358,14 +1398,6 @@ enum LogMessages : uint8_t {
 
     LOG_IDS_FROM_GPS,
 
-    // LOG_MODE_MSG is used as a check for duplicates. Do not add between this and LOG_FORMAT_MSG
-    LOG_MODE_MSG,
-
-    LOG_FORMAT_MSG = 128, // this must remain #128
-
-    LOG_IDS_FROM_DAL,
-    LOG_IDS_FROM_INERTIALSENSOR,
-
     LOG_PIDR_MSG,
     LOG_PIDP_MSG,
     LOG_PIDY_MSG,
@@ -1382,9 +1414,18 @@ enum LogMessages : uint8_t {
     LOG_FORMAT_UNITS_MSG,
     LOG_UNIT_MSG,
     LOG_MULT_MSG,
-
     LOG_RALLY_MSG,
+
+    // LOG_MODE_MSG is used as a check for duplicates. Do not add between this and LOG_FORMAT_MSG
+    LOG_MODE_MSG,
+
+    LOG_FORMAT_MSG = 128, // this must remain #128
+
+    LOG_IDS_FROM_DAL,
+    LOG_IDS_FROM_INERTIALSENSOR,
+
     LOG_IDS_FROM_VISUALODOM,
+    LOG_IDS_FROM_AVOIDANCE,
     LOG_BEACON_MSG,
     LOG_PROXIMITY_MSG,
     LOG_DF_FILE_STATS,
@@ -1397,7 +1438,6 @@ enum LogMessages : uint8_t {
     LOG_ERROR_MSG,
     LOG_ADSB_MSG,
     LOG_ARM_DISARM_MSG,
-    LOG_IDS_FROM_AVOIDANCE,
     LOG_WINCH_MSG,
     LOG_PSCN_MSG,
     LOG_PSCE_MSG,
@@ -1407,14 +1447,13 @@ enum LogMessages : uint8_t {
     LOG_IDS_FROM_AIS,
     LOG_STAK_MSG,
     LOG_FILE_MSG,
+    LOG_SCRIPTING_MSG,
+    LOG_VIDEO_STABILISATION_MSG,
+    LOG_MOTBATT_MSG,
 
     _LOG_LAST_MSG_
 };
 
-static_assert(_LOG_LAST_MSG_ <= 255, "Too many message formats");
+// we reserve ID #255 for future expansion
+static_assert(_LOG_LAST_MSG_ < 255, "Too many message formats");
 static_assert(LOG_MODE_MSG < 128, "Duplicate message format IDs");
-
-enum LogOriginType {
-    ekf_origin = 0,
-    ahrs_home = 1
-};

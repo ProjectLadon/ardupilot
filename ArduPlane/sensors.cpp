@@ -51,17 +51,10 @@ void Plane::read_airspeed(void)
     if (ahrs.airspeed_estimate(aspeed)) {
         smoothed_airspeed = smoothed_airspeed * 0.8f + aspeed * 0.2f;
     }
-}
 
-/*
-  update RPM sensors
- */
-void Plane::rpm_update(void)
-{
-    rpm_sensor.update();
-    if (rpm_sensor.enabled(0) || rpm_sensor.enabled(1)) {
-        if (should_log(MASK_LOG_RC)) {
-            logger.Write_RPM(rpm_sensor);
-        }
-    }
+    // low pass filter speed scaler, with 1Hz cutoff, at 10Hz
+    const float speed_scaler = calc_speed_scaler();
+    const float cutoff_Hz = 2.0;
+    const float dt = 0.1;
+    surface_speed_scaler += calc_lowpass_alpha_dt(dt, cutoff_Hz) * (speed_scaler - surface_speed_scaler);
 }

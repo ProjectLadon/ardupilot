@@ -108,7 +108,7 @@ enum DevOptions {
     DevOptionVFR_HUDRelativeAlt = 2,
 };
 
-//  Logging parameters
+//  Logging parameters - only 32 messages are available to the vehicle here.
 enum LoggingParameters {
      LOG_CONTROL_TUNING_MSG,
      LOG_DATA_INT16_MSG,
@@ -116,7 +116,6 @@ enum LoggingParameters {
      LOG_DATA_INT32_MSG,
      LOG_DATA_UINT32_MSG,
      LOG_DATA_FLOAT_MSG,
-     LOG_MOTBATT_MSG,
      LOG_PARAMTUNE_MSG,
      LOG_HELI_MSG,
      LOG_GUIDEDTARGET_MSG,
@@ -143,6 +142,7 @@ enum LoggingParameters {
 #define MASK_LOG_MOTBATT                (1UL<<17)
 #define MASK_LOG_IMU_FAST               (1UL<<18)
 #define MASK_LOG_IMU_RAW                (1UL<<19)
+#define MASK_LOG_VIDEO_STABILISATION    (1UL<<20)
 #define MASK_LOG_ANY                    0xFFFF
 
 // Radio failsafe definitions (FS_THR parameter)

@@ -67,4 +67,5 @@ env BUILD_ABIN True
 
 # Disable un-needed hardware drivers
 define HAL_WITH_ESC_TELEM 0
-define HAL_AP_FETTEC_ONEWIRE_ENABLED 0
+define AP_FETTEC_ONEWIRE_ENABLED 0
+define AP_OPTICALFLOW_ENABLED 0

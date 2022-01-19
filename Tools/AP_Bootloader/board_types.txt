@@ -150,6 +150,12 @@ AP_HW_KakuteH7                       1048
 AP_HW_ICSI_Kestrel                   1049
 AP_HW_SierraL431                     1050
 AP_HW_NucleoL476                     1051
+AP_HW_SierraF405                     1052
+AP_HW_CarbonixL496                   1053
+AP_HW_MatekF405_TE                   1054
+AP_HW_SierraF412                     1055
+AP_HW_BEASTF7v2                      1057
+AP_HW_KakuteH7Mini                   1058
 
 AP_HW_CUBEORANGE_PERIPH              1400
 AP_HW_CUBEBLACK_PERIPH               1401

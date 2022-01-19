@@ -263,7 +263,7 @@ const AP_Param::GroupInfo AP_BoardConfig::var_info[] = {
     // @Param: OPTIONS
     // @DisplayName: Board options
     // @Description: Board specific option flags
-    // @Bitmask: 0:Enable hardware watchdog, 1:Disable MAVftp, 2:Enable set of internal parameters
+    // @Bitmask: 0:Enable hardware watchdog, 1:Disable MAVftp, 2:Enable set of internal parameters, 3:Enable Debug Pins
     // @User: Advanced
     AP_GROUPINFO("OPTIONS", 19, AP_BoardConfig, _options, HAL_BRD_OPTIONS_DEFAULT),
 
@@ -368,6 +368,7 @@ void AP_BoardConfig::set_default_safety_ignore_mask(uint16_t mask)
 void AP_BoardConfig::init_safety()
 {
     board_init_safety();
+    board_init_debug();
 }
 
 /*
@@ -391,10 +392,20 @@ void AP_BoardConfig::throw_error(const char *err_type, const char *fmt, va_list 
             last_print_ms = now;
             char printfmt[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+2];
             hal.util->snprintf(printfmt, sizeof(printfmt), "%s: %s\n", err_type, fmt);
-            vprintf(printfmt, arg);
+            {
+                va_list arg_copy;
+                va_copy(arg_copy, arg);
+                vprintf(printfmt, arg_copy);
+                va_end(arg_copy);
+            }
 #if !APM_BUILD_TYPE(APM_BUILD_UNKNOWN) && !defined(HAL_BUILD_AP_PERIPH)
             hal.util->snprintf(printfmt, sizeof(printfmt), "%s: %s", err_type, fmt);
-            gcs().send_textv(MAV_SEVERITY_CRITICAL, printfmt, arg);
+            {
+                va_list arg_copy;
+                va_copy(arg_copy, arg);
+                gcs().send_textv(MAV_SEVERITY_CRITICAL, printfmt, arg_copy);
+                va_end(arg_copy);
+            }
 #endif
         }
 #if !APM_BUILD_TYPE(APM_BUILD_UNKNOWN) && !defined(HAL_BUILD_AP_PERIPH)

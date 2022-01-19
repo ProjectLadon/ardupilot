@@ -58,7 +58,6 @@ bool AP_Arming_Copter::run_pre_arm_checks(bool display_failure)
 
     return parameter_checks(display_failure)
         & motor_checks(display_failure)
-        & pilot_throttle_checks(display_failure)
         & oa_checks(display_failure)
         & gcs_failsafe_check(display_failure)
         & winch_checks(display_failure)
@@ -81,7 +80,7 @@ bool AP_Arming_Copter::barometer_checks(bool display_failure)
         nav_filter_status filt_status = copter.inertial_nav.get_filter_status();
         bool using_baro_ref = (!filt_status.flags.pred_horiz_pos_rel && filt_status.flags.pred_horiz_pos_abs);
         if (using_baro_ref) {
-            if (fabsf(copter.inertial_nav.get_altitude() - copter.baro_alt) > PREARM_MAX_ALT_DISPARITY_CM) {
+            if (fabsf(copter.inertial_nav.get_position_z_up_cm() - copter.baro_alt) > PREARM_MAX_ALT_DISPARITY_CM) {
                 check_failed(ARMING_CHECK_BARO, display_failure, "Altitude disparity");
                 ret = false;
             }
@@ -340,25 +339,6 @@ bool AP_Arming_Copter::motor_checks(bool display_failure)
         }
     }
 #endif
-
-    return true;
-}
-
-bool AP_Arming_Copter::pilot_throttle_checks(bool display_failure)
-{
-    // check throttle is above failsafe throttle
-    // this is near the bottom to allow other failures to be displayed before checking pilot throttle
-    if ((checks_to_perform == ARMING_CHECK_ALL) || (checks_to_perform & ARMING_CHECK_RC)) {
-        if (copter.g.failsafe_throttle != FS_THR_DISABLED && copter.channel_throttle->get_radio_in() < copter.g.failsafe_throttle_value) {
-            #if FRAME_CONFIG == HELI_FRAME
-            const char *failmsg = "Collective below Failsafe";
-            #else
-            const char *failmsg = "Throttle below Failsafe";
-            #endif
-            check_failed(ARMING_CHECK_RC, display_failure, "%s", failmsg);
-            return false;
-        }
-    }
 
     return true;
 }
@@ -816,7 +796,7 @@ bool AP_Arming_Copter::arm(const AP_Arming::Method method, const bool do_arming_
         }
 
         // remember the height when we armed
-        copter.arming_altitude_m = copter.inertial_nav.get_altitude() * 0.01;
+        copter.arming_altitude_m = copter.inertial_nav.get_position_z_up_cm() * 0.01;
     }
     copter.update_super_simple_bearing(false);
 

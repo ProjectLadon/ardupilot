@@ -325,6 +325,10 @@ local Vector2f_ud = {}
 ---@return Vector2f_ud
 function Vector2f() end
 
+-- copy
+---@return Vector2f_ud
+function Vector2f_ud:copy() end
+
 -- get field
 ---@return number
 function Vector2f_ud:y() end
@@ -371,6 +375,10 @@ local Vector3f_ud = {}
 
 ---@return Vector3f_ud
 function Vector3f() end
+
+-- copy
+---@return Vector3f_ud
+function Vector3f_ud:copy() end
 
 -- get field
 ---@return number
@@ -437,6 +445,10 @@ local Location_ud = {}
 
 ---@return Location_ud
 function Location() end
+
+-- copy
+---@return Location_ud
+function Location_ud:copy() end
 
 -- get field
 ---@return boolean
@@ -643,6 +655,44 @@ function RC_Channel_ud:get_aux_switch_pos() end
 -- desc
 ---@return number
 function RC_Channel_ud:norm_input() end
+
+
+-- desc
+---@class motors
+motors = {}
+
+-- desc
+---@param param1 string
+function motors:set_frame_string(param1) end
+
+
+-- desc
+---@class FWVersion
+FWVersion = {}
+
+-- get field
+---@return string
+function FWVersion:hash() end
+
+-- get field
+---@return integer
+function FWVersion:patch() end
+
+-- get field
+---@return integer
+function FWVersion:minor() end
+
+-- get field
+---@return integer
+function FWVersion:major() end
+
+-- get field
+---@return integer
+function FWVersion:type() end
+
+-- get field
+---@return string
+function FWVersion:string() end
 
 
 -- desc
@@ -925,6 +975,20 @@ function param:set(name, value) end
 ---@return number|nil
 function param:get(name) end
 
+-- desc
+---@param table_key number
+---@param prefix string
+---@param num_params number
+---@return boolean
+function param:add_table(table_key, prefix, num_params) end
+
+-- desc
+---@param table_key number
+---@param param_num number
+---@param name string
+---@param default_value number
+---@return boolean
+function param::add_param(table_key, param_num, name, default_value) end
 
 -- desc
 ---@class esc_telem
