@@ -19,7 +19,6 @@ void Rover::Log_Write_Attitude()
 
     // log steering rate controller
     logger.Write_PID(LOG_PIDS_MSG, g2.attitude_control.get_steering_rate_pid().get_pid_info());
-    logger.Write_PID(LOG_PIDA_MSG, g2.attitude_control.get_throttle_speed_pid().get_pid_info());
     
     // write roll and pitch controller PID logs
     logger.Write_PID(LOG_ROLL_PID2, g2.attitude_control.get_roll_pid().get_pid_info());
