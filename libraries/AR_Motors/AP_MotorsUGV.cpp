@@ -738,13 +738,13 @@ void AP_MotorsUGV::output_regular(bool armed, float ground_speed, float steering
                     }
                 }
                 // reverse steering direction when backing up
-                if (is_negative(ground_speed) & !no_reverse) {
+                if (is_negative(ground_speed) && !no_reverse) {
                     _scaling *= -1.0f;
                 }
             }
         } else {
             // reverse steering direction when backing up
-            if (is_negative(throttle) & !no_reverse) {
+            if (is_negative(throttle) && !no_reverse) {
                 _scaling *= -1.0f;
             }
         }
