@@ -28,6 +28,7 @@ import shlex
 import binascii
 import math
 
+from pysim import util
 from pysim import vehicleinfo
 
 
@@ -268,7 +269,7 @@ def kill_tasks():
             'MAVProxy.exe',
             'runsim.py',
             'AntennaTracker.elf',
-            'scrimmage'
+            'scrimmage',
             'ardurover',
             'arduplane',
             'arducopter'
@@ -415,7 +416,7 @@ def get_user_locations_path():
     '''The user locations.txt file is located by default in
     $XDG_CONFIG_DIR/ardupilot/locations.txt. If $XDG_CONFIG_DIR is
     not defined, we look in $HOME/.config/ardupilot/locations.txt.  If
-    $HOME is not defined, we look in ./.config/ardpupilot/locations.txt.'''
+    $HOME is not defined, we look in ./.config/ardupilot/locations.txt.'''
 
     config_dir = os.environ.get(
         'XDG_CONFIG_DIR',
@@ -683,7 +684,7 @@ def start_vehicle(binary, opts, stuff, spawns=None):
         paths = stuff["default_params_filename"]
         if not isinstance(paths, list):
             paths = [paths]
-        paths = [os.path.join(autotest_dir, x) for x in paths]
+        paths = [util.relcurdir(os.path.join(autotest_dir, x)) for x in paths]
         for x in paths:
             if not os.path.isfile(x):
                 print("The parameter file (%s) does not exist" % (x,))

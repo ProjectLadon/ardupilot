@@ -13,10 +13,14 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 /*
- *   AP_BoardConfig - px4 driver loading and setup
+ *   AP_BoardConfig - driver loading and setup
  */
 
+
 #include <AP_HAL/AP_HAL.h>
+#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
+#include <hal.h>
+#endif
 #include "AP_BoardConfig.h"
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Math/crc.h>
@@ -280,6 +284,10 @@ bool AP_BoardConfig::check_ms5611(const char* devname) {
 
 #define INV2_WHOAMI_ICM20948 0xEA
 #define INV2_WHOAMI_ICM20649 0xE1
+
+#define INV3REG_WHOAMI        0x75
+
+#define INV3_WHOAMI_ICM42688  0x47
 
 /*
   validation of the board type

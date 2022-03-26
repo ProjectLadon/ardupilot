@@ -132,14 +132,7 @@ void AC_Loiter::init_target()
 /// reduce response for landing
 void AC_Loiter::soften_for_landing()
 {
-    const Vector3f& curr_pos = _inav.get_position_neu_cm();
-
-    // set target position to current position
-    _pos_control.set_pos_target_xy_cm(curr_pos.x, curr_pos.y);
-
-    // also prevent I term build up in xy velocity controller. Note
-    // that this flag is reset on each loop, in update_xy_controller()
-    _pos_control.set_externally_limited_xy();
+    _pos_control.soften_for_landing_xy();
 }
 
 /// set pilot desired acceleration in centi-degrees
@@ -218,7 +211,7 @@ void AC_Loiter::calc_desired_velocity(float nav_dt, bool avoidance_on)
     float gnd_speed_limit_cms = MIN(_speed_cms, ekfGndSpdLimit*100.0f);
     gnd_speed_limit_cms = MAX(gnd_speed_limit_cms, LOITER_SPEED_MIN);
 
-    float pilot_acceleration_max = GRAVITY_MSS*100.0f * tanf(radians(get_angle_max_cd()*0.01f));
+    float pilot_acceleration_max = angle_to_accel(get_angle_max_cd()*0.01) * 100;
 
     // range check nav_dt
     if (nav_dt < 0) {

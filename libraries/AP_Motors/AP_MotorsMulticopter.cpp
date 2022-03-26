@@ -398,7 +398,7 @@ void AP_MotorsMulticopter::update_lift_max_from_batt_voltage()
 // 10hz logging of voltage scaling and max trust
 void AP_MotorsMulticopter::Log_Write()
 {
-    struct log_MotBatt pkt_mot = {
+    const struct log_MotBatt pkt_mot {
         LOG_PACKET_HEADER_INIT(LOG_MOTBATT_MSG),
         time_us         : AP_HAL::micros64(),
         lift_max        : _lift_max,
@@ -758,7 +758,7 @@ void AP_MotorsMulticopter::output_motor_mask(float thrust, uint8_t mask, float r
 
     for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
         if (motor_enabled[i]) {
-            if ((mask & (1U << i)) && armed()) {
+            if ((mask & (1U << i)) && armed() && get_interlock()) {
                 /*
                  apply rudder mixing differential thrust
                  copter frame roll is plane frame yaw as this only

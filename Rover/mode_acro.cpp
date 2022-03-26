@@ -9,8 +9,13 @@ void ModeAcro::update()
     float speed, desired_steering, desired_throttle, desired_speed;
     if (!attitude_control.get_forward_speed(speed)) {
         // convert pilot stick input into desired steering and throttle
-        get_pilot_desired_steering_and_throttle(
-            desired_steering, desired_throttle);
+        get_pilot_desired_steering_and_throttle(desired_steering, desired_throttle);
+
+        // if vehicle is balance bot, calculate actual throttle required for balancing
+        if (rover.is_balancebot()) {
+            rover.balancebot_pitch_control(desired_throttle);
+        }
+
         // no valid speed, just use the provided throttle
         g2.motors.set_throttle(desired_throttle);
         //hal.console->printf(

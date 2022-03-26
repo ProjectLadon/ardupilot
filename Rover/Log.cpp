@@ -13,9 +13,6 @@ void Rover::Log_Write_Attitude()
     ahrs.Write_Attitude(targets);
 
     AP::ahrs().Log_Write();
-    ahrs.Write_AHRS2();
-
-    ahrs.Write_POS();
 
     // log steering rate controller
     logger.Write_PID(LOG_PIDS_MSG, g2.attitude_control.get_steering_rate_pid().get_pid_info());
@@ -33,9 +30,6 @@ void Rover::Log_Write_Attitude()
     if (rover.g2.sailboat.sail_enabled()) {
         logger.Write_PID(LOG_PIDR_MSG, g2.attitude_control.get_sailboat_heel_pid().get_pid_info());
     }
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    sitl.Log_Write_SIMSTATE();
-#endif
 }
 
 // Write a range finder depth message
@@ -48,7 +42,7 @@ void Rover::Log_Write_Depth()
 
     // get position
     Location loc;
-    IGNORE_RETURN(ahrs.get_position(loc));
+    IGNORE_RETURN(ahrs.get_location(loc));
 
     for (uint8_t i=0; i<rangefinder.num_sensors(); i++) {
         const AP_RangeFinder_Backend *s = rangefinder.get_backend(i);
@@ -192,24 +186,6 @@ struct PACKED log_Steering {
     float turn_rate;
 };
 
-struct PACKED log_Startup {
-    LOG_PACKET_HEADER;
-    uint64_t time_us;
-    uint8_t startup_type;
-    uint16_t command_total;
-};
-
-void Rover::Log_Write_Startup(uint8_t type)
-{
-    struct log_Startup pkt = {
-        LOG_PACKET_HEADER_INIT(LOG_STARTUP_MSG),
-        time_us         : AP_HAL::micros64(),
-        startup_type    : type,
-        command_total   : mode_auto.mission.num_commands()
-    };
-    logger.WriteBlock(&pkt, sizeof(pkt));
-}
-
 // Write a steering packet
 void Rover::Log_Write_Steering()
 {
@@ -268,7 +244,6 @@ void Rover::Log_Write_RC(void)
 void Rover::Log_Write_Vehicle_Startup_Messages()
 {
     // only 200(?) bytes are guaranteed by AP_Logger
-    Log_Write_Startup(TYPE_GROUNDSTART_MSG);
     logger.Write_Mode(control_mode->mode_number(), control_mode_reason);
     ahrs.Log_Write_Home_And_Origin();
     gps.Write_AP_Logger_Log_Startup_messages();
@@ -280,15 +255,6 @@ void Rover::Log_Write_Vehicle_Startup_Messages()
 
 const LogStructure Rover::log_structure[] = {
     LOG_COMMON_STRUCTURES,
-
-// @LoggerMessage: STRT
-// @Description: Startup messages
-// @Field: TimeUS: Time since system startup
-// @Field: SType: Type of startup
-// @Field: CTot: Total number of commands in the mission
-
-    { LOG_STARTUP_MSG, sizeof(log_Startup),
-      "STRT", "QBH",        "TimeUS,SType,CTot", "s--", "F--" },
 
 // @LoggerMessage: THR
 // @Description: Throttle related messages
@@ -328,7 +294,7 @@ const LogStructure Rover::log_structure[] = {
     { LOG_STEERING_MSG, sizeof(log_Steering),
       "STER", "Qhfffff",   "TimeUS,SteerIn,SteerOut,DesLatAcc,LatAcc,DesTurnRate,TurnRate", "s--ookk", "F--0000" },
 
-// @LoggerMessage: GUID
+// @LoggerMessage: GUIP
 // @Description: Guided mode target information
 // @Field: TimeUS: Time since system startup
 // @Field: Type: Type of guided mode
@@ -340,11 +306,9 @@ const LogStructure Rover::log_structure[] = {
 // @Field: vZ: Target velocity, Z-Axis
     
     { LOG_GUIDEDTARGET_MSG, sizeof(log_GuidedTarget),
-      "GUID",  "QBffffff",    "TimeUS,Type,pX,pY,pZ,vX,vY,vZ", "s-mmmnnn", "F-000000" },
-    { LOG_ROLL_PID2, sizeof(log_PID),
-      "PI2R", PID_FMT,  PID_LABELS, PID_UNITS, PID_MULTS },
-    { LOG_PITCH_PID2, sizeof(log_PID),
-      "PI2P", PID_FMT,  PID_LABELS, PID_UNITS, PID_MULTS },
+      "GUIP",  "QBffffff",    "TimeUS,Type,pX,pY,pZ,vX,vY,vZ", "s-mmmnnn", "F-000000" },
+    { LOG_ROLL_PID2, sizeof(log_PID), "PI2R", PID_FMT, PID_LABELS, PID_UNITS, PID_MULTS },
+    { LOG_PITCH_PID2, sizeof(log_PID), "PI2P", PID_FMT, PID_LABELS, PID_UNITS, PID_MULTS },
 };
 
 void Rover::log_init(void)
@@ -360,7 +324,6 @@ void Rover::Log_Write_Depth() {}
 void Rover::Log_Write_GuidedTarget(uint8_t target_type, const Vector3f& pos_target, const Vector3f& vel_target) {}
 void Rover::Log_Write_Nav_Tuning() {}
 void Rover::Log_Write_Sail() {}
-void Rover::Log_Write_Startup(uint8_t type) {}
 void Rover::Log_Write_Throttle() {}
 void Rover::Log_Write_RC(void) {}
 void Rover::Log_Write_Steering() {}

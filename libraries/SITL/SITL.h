@@ -1,8 +1,8 @@
 #pragma once
 
-#include <AP_HAL/AP_HAL.h>
+#include <AP_HAL/AP_HAL_Boards.h>
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+#if AP_SIM_ENABLED
 
 #include <AP_Math/AP_Math.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>
@@ -102,7 +102,9 @@ public:
         AP_Param::setup_object_defaults(this, var_info);
         AP_Param::setup_object_defaults(this, var_info2);
         AP_Param::setup_object_defaults(this, var_info3);
+#if HAL_SIM_GPS_ENABLED
         AP_Param::setup_object_defaults(this, var_gps);
+#endif
         AP_Param::setup_object_defaults(this, var_mag);
         AP_Param::setup_object_defaults(this, var_ins);
 #ifdef SFML_JOYSTICK
@@ -148,7 +150,9 @@ public:
     static const struct AP_Param::GroupInfo var_info[];
     static const struct AP_Param::GroupInfo var_info2[];
     static const struct AP_Param::GroupInfo var_info3[];
+#if HAL_SIM_GPS_ENABLED
     static const struct AP_Param::GroupInfo var_gps[];
+#endif
     static const struct AP_Param::GroupInfo var_mag[];
     static const struct AP_Param::GroupInfo var_ins[];
 #ifdef SFML_JOYSTICK
@@ -447,12 +451,14 @@ public:
     float get_apparent_wind_dir() const{return state.wind_vane_apparent.direction;}
     float get_apparent_wind_spd() const{return state.wind_vane_apparent.speed;}
 
+#if HAL_INS_TEMPERATURE_CAL_ENABLE
     // IMU temperature calibration params
     AP_Float imu_temp_start;
     AP_Float imu_temp_end;
     AP_Float imu_temp_tconst;
     AP_Float imu_temp_fixed;
     AP_InertialSensor::TCal imu_tcal[INS_MAX_INSTANCES];
+#endif
 
     // IMU control parameters
     AP_Float gyro_noise[INS_MAX_INSTANCES];  // in degrees/second
@@ -480,4 +486,4 @@ namespace AP {
     SITL::SIM *sitl();
 };
 
-#endif // CONFIG_HAL_BOARD
+#endif // AP_SIM_ENABLED

@@ -57,9 +57,12 @@ def topdir():
     d = os.path.dirname(d)
     return d
 
+def relcurdir(path):
+    """Return a path relative to current dir"""
+    return os.path.relpath(path, os.getcwd())
 
 def reltopdir(path):
-    """Return a path relative to topdir()."""
+    """Returns the normalized ABSOLUTE path for 'path', where path is a path relative to topdir"""
     return os.path.normpath(os.path.join(topdir(), path))
 
 
@@ -408,10 +411,11 @@ def start_SITL(binary,
             cmd.extend(['--speedup', str(speedup)])
         if defaults_filepath is not None:
             if type(defaults_filepath) == list:
-                if len(defaults_filepath):
-                    cmd.extend(['--defaults', ",".join(defaults_filepath)])
+                defaults = [reltopdir(path) for path in defaults_filepath]
+                if len(defaults):
+                    cmd.extend(['--defaults', ",".join(defaults)])
             else:
-                cmd.extend(['--defaults', defaults_filepath])
+                cmd.extend(['--defaults', reltopdir(defaults_filepath)])
         if unhide_parameters:
             cmd.extend(['--unhide-groups'])
         # somewhere for MAVProxy to connect to:

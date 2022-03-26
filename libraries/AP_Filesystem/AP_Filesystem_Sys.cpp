@@ -36,6 +36,7 @@ static const SysFileList sysfs_file_list[] = {
     {"dma.txt"},
     {"memory.txt"},
     {"uarts.txt"},
+    {"timers.txt"},
 #if HAL_MAX_CAN_PROTOCOL_DRIVERS
     {"can_log.txt"},
 #endif
@@ -59,7 +60,7 @@ int8_t AP_Filesystem_Sys::file_in_sysfs(const char *fname) {
     return -1;
 }
 
-int AP_Filesystem_Sys::open(const char *fname, int flags)
+int AP_Filesystem_Sys::open(const char *fname, int flags, bool allow_absolute_paths)
 {
     if ((flags & O_ACCMODE) != O_RDONLY) {
         errno = EROFS;
@@ -110,6 +111,9 @@ int AP_Filesystem_Sys::open(const char *fname, int flags)
         hal.util->uart_info(*r.str);
     }
 #endif
+    if (strcmp(fname, "timers.txt") == 0) {
+        hal.util->timer_info(*r.str);
+    }
 #if HAL_CANMANAGER_ENABLED
     if (strcmp(fname, "can_log.txt") == 0) {
         AP::can().log_retrieve(*r.str);

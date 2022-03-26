@@ -65,7 +65,7 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
     SCHED_TASK(update_GPS_10Hz,        10,    400,  33),
     SCHED_TASK(navigate,               10,    150,  36),
     SCHED_TASK(update_compass,         10,    200,  39),
-    SCHED_TASK(read_airspeed,          10,    100,  42),
+    SCHED_TASK(calc_airspeed_errors,   10,    100,  42),
     SCHED_TASK(update_alt,             10,    200,  45),
     SCHED_TASK(adjust_altitude_target, 10,    200,  48),
 #if ADVANCED_FAILSAFE == ENABLED
@@ -396,7 +396,7 @@ void Plane::update_GPS_50Hz(void)
     gps.update();
 
     // get position from AHRS
-    have_position = ahrs.get_position(current_loc);
+    have_position = ahrs.get_location(current_loc);
     ahrs.get_relative_position_D_home(relative_altitude);
     relative_altitude *= -1.0f;
 }
@@ -713,19 +713,20 @@ bool Plane::get_wp_crosstrack_error_m(float &xtrack_error) const
 
 #if AP_SCRIPTING_ENABLED
 // set target location (for use by scripting)
-bool Plane::set_target_location(const Location& target_loc)
+bool Plane::set_target_location(const Location &target_loc)
 {
+    Location loc{target_loc};
+
     if (plane.control_mode != &plane.mode_guided) {
         // only accept position updates when in GUIDED mode
         return false;
     }
-    plane.guided_WP_loc = target_loc;
     // add home alt if needed
-    if (plane.guided_WP_loc.relative_alt) {
-        plane.guided_WP_loc.alt += plane.home.alt;
-        plane.guided_WP_loc.relative_alt = 0;
+    if (loc.relative_alt) {
+        loc.alt += plane.home.alt;
+        loc.relative_alt = 0;
     }
-    plane.set_guided_WP();
+    plane.set_guided_WP(loc);
     return true;
 }
 
@@ -738,6 +739,7 @@ bool Plane::get_target_location(Location& target_loc)
     case Mode::Number::GUIDED:
     case Mode::Number::AUTO:
     case Mode::Number::LOITER:
+    case Mode::Number::TAKEOFF:
 #if HAL_QUADPLANE_ENABLED
     case Mode::Number::QLOITER:
     case Mode::Number::QLAND:
@@ -751,6 +753,39 @@ bool Plane::get_target_location(Location& target_loc)
     }
     return false;
 }
+
+/*
+  update_target_location() works in all auto navigation modes
+ */
+bool Plane::update_target_location(const Location &old_loc, const Location &new_loc)
+{
+    if (!old_loc.same_latlon_as(next_WP_loc)) {
+        return false;
+    }
+    ftype alt_diff;
+    if (!old_loc.get_alt_distance(next_WP_loc, alt_diff) ||
+        !is_zero(alt_diff)) {
+        return false;
+    }
+    next_WP_loc = new_loc;
+    next_WP_loc.change_alt_frame(old_loc.get_alt_frame());
+
+    return true;
+}
+
+// allow for velocity matching in VTOL
+bool Plane::set_velocity_match(const Vector2f &velocity)
+{
+#if HAL_QUADPLANE_ENABLED
+    if (quadplane.in_vtol_mode() || quadplane.in_vtol_land_sequence()) {
+        quadplane.poscontrol.velocity_match = velocity;
+        quadplane.poscontrol.last_velocity_match_ms = AP_HAL::millis();
+        return true;
+    }
+#endif
+    return false;
+}
+
 #endif // AP_SCRIPTING_ENABLED
 
 #if OSD_ENABLED

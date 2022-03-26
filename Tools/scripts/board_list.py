@@ -14,6 +14,15 @@ class Board(object):
     def __init__(self, name):
         self.name = name
         self.is_ap_periph = False
+        self.autobuild_targets = [
+            'Tracker',
+            'Blimp',
+            'Copter',
+            'Heli',
+            'Plane',
+            'Rover',
+            'Sub',
+        ]
 
 
 class BoardList(object):
@@ -77,6 +86,13 @@ class BoardList(object):
                 if re.match(r"^\s*env AP_PERIPH_HEAVY 1", line):
                     board.is_ap_periph = 1
 
+                # a hwdef can specify which vehicles this target is valid for:
+                match = re.match(r"AUTOBUILD_TARGETS\s*(.*)", line)
+                if match is not None:
+                    board.autobuild_targets = [
+                        x.rstrip().lstrip().lower() for x in match.group(1).split(",")
+                    ]
+
     def read_hwdef(self, filepath):
         fh = open(filepath)
         ret = []
@@ -89,7 +105,7 @@ class BoardList(object):
                 ret += [line]
         return ret
 
-    def find_autobuild_boards(self):
+    def find_autobuild_boards(self, build_target=None):
         ret = []
         for board in self.boards:
             if board.is_ap_periph:
@@ -101,13 +117,6 @@ class BoardList(object):
         # should probably have a line in the hwdef indicating they
         # shouldn't be auto-built...
         blacklist = [
-            # the following boards are hacked into build_binaries.py
-            # to be built for Copter only:
-            "CubeGreen-solo",
-            "CubeSolo",
-            "skyviper-journey",
-            "skyviper-v2450",
-
             # IOMCU:
             "iomcu",
             'iomcu_f103_8MHz',
@@ -121,7 +130,6 @@ class BoardList(object):
             # bdshot
             "CubeYellow-bdshot",
             "fmuv3-bdshot",
-            "fmuv5-bdshot",
             "KakuteF7-bdshot",
             "OMNIBUSF7V2-bdshot",
             "Pixhawk1-1M-bdshot",
@@ -137,7 +145,20 @@ class BoardList(object):
 
         ret = filter(lambda x : x not in blacklist, ret)
 
-        return list(ret)
+        # if the caller has supplied a vehicle to limit to then we do that here:
+        if build_target is not None:
+            # Slow down: n^2 algorithm ahead
+            newret = []
+            for x in ret:
+                for b in self.boards:
+                    if b.name.lower() != x.lower():
+                        continue
+                    if build_target.lower() not in [y.lower() for y in b.autobuild_targets]:
+                        continue
+                    newret.append(x)
+            ret = newret
+
+        return sorted(list(ret))
 
     def find_ap_periph_boards(self):
         blacklist = [
@@ -160,7 +181,7 @@ class BoardList(object):
             if x.name in blacklist:
                 continue
             ret.append(x.name)
-        return list(ret)
+        return sorted(list(ret))
 
 
 AUTOBUILD_BOARDS = BoardList().find_autobuild_boards()

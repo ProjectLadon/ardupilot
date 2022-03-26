@@ -82,7 +82,7 @@ bool Compass::_start_calibration(uint8_t i, bool retry, float delay)
 
     if (_rotate_auto) {
         enum Rotation r = _get_state(prio).external?(enum Rotation)_get_state(prio).orientation.get():ROTATION_NONE;
-        if (r != ROTATION_CUSTOM) {
+        if (r < ROTATION_MAX) {
             _calibrator[prio]->set_orientation(r, _get_state(prio).external, _rotate_auto>=2, _rotate_auto>=3);
         }
     }
@@ -489,7 +489,7 @@ MAV_RESULT Compass::mag_cal_fixed_yaw(float yaw_deg, uint8_t compass_mask,
     if (is_zero(lat_deg) && is_zero(lon_deg)) {
         Location loc;
         // get AHRS position. If unavailable then try GPS location
-        if (!AP::ahrs().get_position(loc)) {
+        if (!AP::ahrs().get_location(loc)) {
             if (AP::gps().status() < AP_GPS::GPS_OK_FIX_3D) {
                 gcs().send_text(MAV_SEVERITY_ERROR, "Mag: no position available");
                 return MAV_RESULT_FAILED;

@@ -18,6 +18,7 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Common/Location.h>
 #include <AP_Filesystem/AP_Filesystem_Available.h>
+#include <GCS_MAVLink/GCS_MAVLink.h>
 
 #ifndef AP_TERRAIN_AVAILABLE
 #if HAVE_FILESYSTEM_SUPPORT && defined(HAL_BOARD_TERRAIN_DIRECTORY)
@@ -30,7 +31,6 @@
 #if AP_TERRAIN_AVAILABLE
 
 #include <AP_Param/AP_Param.h>
-#include <AP_Mission/AP_Mission.h>
 
 #define TERRAIN_DEBUG 0
 
@@ -83,11 +83,10 @@
 
 class AP_Terrain {
 public:
-    AP_Terrain(const AP_Mission &_mission);
+    AP_Terrain();
 
     /* Do not allow copies */
-    AP_Terrain(const AP_Terrain &other) = delete;
-    AP_Terrain &operator=(const AP_Terrain&) = delete;
+    CLASS_NO_COPY(AP_Terrain);
 
     static AP_Terrain *get_singleton(void) { return singleton; }
 
@@ -122,12 +121,8 @@ public:
       find the terrain height in meters above sea level for a location
 
       return false if not available
-
-      if corrected is true then terrain alt is adjusted so that
-      the terrain altitude matches the home altitude at the home location
-      (i.e. we assume home is at the terrain altitude)
      */
-    bool height_amsl(const Location &loc, float &height, bool corrected);
+    bool height_amsl(const Location &loc, float &height);
 
     /* 
        find difference between home terrain height and the terrain
@@ -359,10 +354,6 @@ private:
     enum class Options {
         DisableDownload = (1U<<0),
     };
-
-    // reference to AP_Mission, so we can ask preload terrain data for 
-    // all waypoints
-    const AP_Mission &mission;
 
     // cache of grids in memory, LRU
     uint8_t cache_size = 0;
